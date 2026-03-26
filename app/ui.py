@@ -79,9 +79,9 @@ def upload_pdf(files, session_id: str):
             path = Path(file_path)
             chunks = load_and_chunk_pdf(path)
             count = ingest_documents(chunks)
-            results.append(f"✓ {path.name}: {count} chunks ingested")
+            results.append(f"[OK] {path.name}: {count} chunks ingested")
         except Exception as e:
-            results.append(f"✗ {Path(file_path).name}: {e}")
+            results.append(f"[FAIL] {Path(file_path).name}: {e}")
 
     return "\n".join(results)
 
@@ -96,7 +96,7 @@ def build_ui() -> gr.Blocks:
         title="RAG AI Chatbot",
         theme=gr.themes.Soft(),
     ) as demo:
-        gr.Markdown("# 📚 RAG AI Chatbot\nAsk questions about your PDF knowledge base.")
+        gr.Markdown("# RAG AI Chatbot\nAsk questions about your PDF knowledge base.")
 
         session_id = gr.State(value=lambda: str(uuid.uuid4()))
 
@@ -132,7 +132,7 @@ def build_ui() -> gr.Blocks:
                     step=1,
                     label="Top-K documents",
                 )
-                clear_btn = gr.Button("🗑 Clear conversation")
+                clear_btn = gr.Button("Clear conversation")
 
                 gr.Markdown("### Upload PDFs")
                 pdf_upload = gr.File(
@@ -140,7 +140,7 @@ def build_ui() -> gr.Blocks:
                     file_types=[".pdf"],
                     file_count="multiple",
                 )
-                upload_btn = gr.Button("📤 Ingest uploaded PDFs")
+                upload_btn = gr.Button("Ingest uploaded PDFs")
                 upload_status = gr.Textbox(
                     label="Upload status",
                     interactive=False,
