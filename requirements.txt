@@ -1,0 +1,16 @@
+langchain>=0.3
+langchain-openai>=0.2
+langchain-pinecone>=0.2
+langchain-community>=0.3
+langgraph>=0.2
+pinecone-client>=5.0
+openai>=1.0
+gradio>=4.0
+pypdf>=4.0
+tiktoken>=0.7
+pydantic-settings>=2.0
+python-dotenv>=1.0
+
+# Dev
+pytest>=8.0
+pytest-asyncio>=0.23
