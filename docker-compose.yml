@@ -2,9 +2,14 @@ services:
   chatbot:
     build: .
     ports:
-      - "7860:7860"
+      - "8501:8501"
     env_file:
       - .env
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
     volumes:
       - ./data/pdfs:/app/data/pdfs
+      - ./data/chroma:/app/data/chroma
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped

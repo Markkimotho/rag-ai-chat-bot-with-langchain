@@ -1,14 +1,14 @@
 from functools import lru_cache
 
-from langchain_openai import OpenAIEmbeddings
+from langchain_ollama import OllamaEmbeddings
 
 from app.config import get_settings
 
 
 @lru_cache
-def get_embeddings() -> OpenAIEmbeddings:
+def get_embeddings() -> OllamaEmbeddings:
     settings = get_settings()
-    return OpenAIEmbeddings(
-        model=settings.embedding_model,
-        openai_api_key=settings.openai_api_key.get_secret_value(),
+    return OllamaEmbeddings(
+        model=settings.ollama_embedding_model,
+        base_url=settings.ollama_base_url,
     )

@@ -21,6 +21,7 @@ build/
 
 # Data
 data/pdfs/
+data/chroma/
 
 # OS
 .DS_Store

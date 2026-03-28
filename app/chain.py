@@ -3,7 +3,7 @@
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_classic.chains.history_aware_retriever import create_history_aware_retriever
 from langchain_classic.chains.retrieval import create_retrieval_chain
-from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 
 from app.config import get_settings
 from app.memory import add_messages, get_chat_history
@@ -13,9 +13,9 @@ from app.retriever import get_retriever
 
 def _build_chain(model: str | None = None, top_k: int | None = None):
     settings = get_settings()
-    llm = ChatOpenAI(
-        model=model or settings.openai_model,
-        api_key=settings.openai_api_key.get_secret_value(),
+    llm = ChatOllama(
+        model=model or settings.ollama_model,
+        base_url=settings.ollama_base_url,
         temperature=0,
     )
     retriever = get_retriever(top_k=top_k)

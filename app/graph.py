@@ -6,7 +6,8 @@ from typing import Annotated, Sequence, TypedDict
 
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from langchain_openai import ChatOpenAI
+from langchain_core.runnables import RunnableConfig
+from langchain_ollama import ChatOllama
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
@@ -23,16 +24,16 @@ class GraphState(TypedDict):
     answer: str
 
 
-def _get_llm(model: str | None = None) -> ChatOpenAI:
+def _get_llm(model: str | None = None) -> ChatOllama:
     settings = get_settings()
-    return ChatOpenAI(
-        model=model or settings.openai_model,
-        api_key=settings.openai_api_key.get_secret_value(),
+    return ChatOllama(
+        model=model or settings.ollama_model,
+        base_url=settings.ollama_base_url,
         temperature=0,
     )
 
 
-def contextualize(state: GraphState, config: dict) -> dict:
+def contextualize(state: GraphState, config: RunnableConfig) -> dict:
     """Rephrase the question to be standalone given chat history."""
     messages = list(state["messages"])
     question = state["question"]
@@ -49,15 +50,15 @@ def contextualize(state: GraphState, config: dict) -> dict:
     return {"question": question}
 
 
-def retrieve(state: GraphState, config: dict) -> dict:
-    """Retrieve relevant documents from Pinecone."""
+def retrieve(state: GraphState, config: RunnableConfig) -> dict:
+    """Retrieve relevant documents from the vector store."""
     top_k = config.get("configurable", {}).get("top_k")
     retriever = get_retriever(top_k=top_k)
     documents = retriever.invoke(state["question"])
     return {"documents": documents}
 
 
-def generate(state: GraphState, config: dict) -> dict:
+def generate(state: GraphState, config: RunnableConfig) -> dict:
     """Generate answer from retrieved documents."""
     model = config.get("configurable", {}).get("model")
     llm = _get_llm(model)
