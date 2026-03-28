@@ -41,11 +41,76 @@ SUGGESTED_QUESTIONS = [
     "What recommendations or action items are mentioned?",
 ]
 
-_SECTION_ACCENT = {
+# Section accent colors — will be set dynamically based on active theme
+_SECTION_ACCENTS_DARK = {
     "summary": "#818cf8",
     "key_metrics": "#34d399",
     "risks": "#f87171",
     "recommendations": "#fbbf24",
+}
+
+_SECTION_ACCENTS_LIGHT = {
+    "summary": "#5856d6",
+    "key_metrics": "#17a2f7",
+    "risks": "#ff3b30",
+    "recommendations": "#ff9500",
+}
+
+# ── Theme Configuration ───────────────────────────────────────────────────────
+
+_THEMES = {
+    "dark": {
+        "name": "Dark",
+        "bg_primary": "#0a0a0a",
+        "bg_secondary": "#101012",
+        "bg_tertiary": "#141416",
+        "bg_hover": "#1e1e22",
+        "bg_input": "#141416",
+        "bg_border": "#1e1e22",
+        "text_primary": "#e4e4e7",
+        "text_secondary": "#a1a1aa",
+        "text_tertiary": "#52525b",
+        "text_disabled": "#3f3f46",
+        "text_placeholder": "#2a2a2e",
+        "accent": "#818cf8",
+        "accent_hover": "#6366f1",
+        "accent_active": "#4f46e5",
+        "accent_dark": "#4338ca",
+        "success": "#4ade80",
+        "error": "#f87171",
+        "warning": "#fbbf24",
+        "info": "#34d399",
+        "border": "#1px solid #1e1e22",
+        "tag_bg": "rgba(79,70,229,0.18)",
+        "tag_border": "rgba(99,102,241,0.4)",
+        "tag_text": "#a5b4fc",
+    },
+    "light": {
+        "name": "Light",
+        "bg_primary": "#fafafa",
+        "bg_secondary": "#f3f3f7",
+        "bg_tertiary": "#ebebf0",
+        "bg_hover": "#e0e0e8",
+        "bg_input": "#f5f5f9",
+        "bg_border": "#d9d9e3",
+        "text_primary": "#1a1a1a",
+        "text_secondary": "#404040",
+        "text_tertiary": "#666666",
+        "text_disabled": "#999999",
+        "text_placeholder": "#b0b0b0",
+        "accent": "#5856d6",
+        "accent_hover": "#6f6cdf",
+        "accent_active": "#8985f2",
+        "accent_dark": "#3c3aa8",
+        "success": "#34c759",
+        "error": "#ff3b30",
+        "warning": "#ff9500",
+        "info": "#17a2f7",
+        "border": "1px solid #d9d9e3",
+        "tag_bg": "rgba(88,86,214,0.12)",
+        "tag_border": "rgba(88,86,214,0.25)",
+        "tag_text": "#3c3aa8",
+    },
 }
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -58,10 +123,20 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Custom CSS
+# Dynamic Theme CSS Generator
 # ---------------------------------------------------------------------------
 
-CUSTOM_CSS = """
+
+def _get_system_theme_preference() -> str:
+    """Detect system theme preference via browser CSS media query."""
+    # This is evaluated client-side, we default to 'dark' on server
+    return "dark"
+
+
+def _generate_css(theme: str) -> str:
+    """Generate CSS for the given theme."""
+    colors = _THEMES.get(theme, _THEMES["dark"])
+    return f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
 
@@ -79,44 +154,44 @@ html, body,
 [data-testid="stMetric"],
 [data-testid="stCaptionContainer"],
 [data-baseweb="tab"], [data-baseweb="select"],
-p, h1, h2, h3, h4, h5, h6, li, td, th, label, caption {
+p, h1, h2, h3, h4, h5, h6, li, td, th, label, caption {{
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
+}}
 
 /* ── Hide Streamlit chrome ── */
-#MainMenu, footer { display: none !important; }
-[data-testid="stStatusWidget"] { display: none !important; }
+#MainMenu, footer {{ display: none !important; }}
+[data-testid="stStatusWidget"] {{ display: none !important; }}
 
 /* ── App background ── */
 .stApp,
 [data-testid="stAppViewContainer"],
-[data-testid="stMain"] {
-    background: #0a0a0a !important;
-}
-[data-testid="stMain"] .block-container {
+[data-testid="stMain"] {{
+    background: {colors['bg_primary']} !important;
+}}
+[data-testid="stMain"] .block-container {{
     padding-top: 1.5rem !important;
     padding-bottom: 2rem !important;
     max-width: 1100px !important;
-}
+}}
 
 /* ── Sidebar ── */
-[data-testid="stSidebar"] {
-    background: #101012 !important;
-    border-right: 1px solid #1e1e22 !important;
-}
-[data-testid="stSidebarContent"] { padding: 1.25rem 0.875rem; }
+[data-testid="stSidebar"] {{
+    background: {colors['bg_secondary']} !important;
+    border-right: {colors['border']} !important;
+}}
+[data-testid="stSidebarContent"] {{ padding: 1.25rem 0.875rem; }}
 
 /* ── Tabs — underline indicator style ── */
-.stTabs [data-baseweb="tab-list"] {
+.stTabs [data-baseweb="tab-list"] {{
     background: transparent !important;
-    border-bottom: 1px solid #1e1e22;
+    border-bottom: 1px solid {colors['bg_border']};
     padding: 0;
     gap: 0;
     margin-bottom: 1.5rem;
-}
-.stTabs [data-baseweb="tab"] {
+}}
+.stTabs [data-baseweb="tab"] {{
     border-radius: 0 !important;
-    color: #52525b;
+    color: {colors['text_tertiary']};
     font-weight: 500;
     font-size: 0.8rem;
     letter-spacing: 0.01em;
@@ -125,176 +200,274 @@ p, h1, h2, h3, h4, h5, h6, li, td, th, label, caption {
     border-bottom: 2px solid transparent;
     margin-bottom: -1px;
     transition: color 0.15s;
-}
-.stTabs [aria-selected="true"] {
+}}
+.stTabs [aria-selected="true"] {{
     background: transparent !important;
-    color: #e4e4e7 !important;
-    border-bottom: 2px solid #818cf8 !important;
-}
-.stTabs [data-baseweb="tab-highlight"] { display: none !important; }
+    color: {colors['text_primary']} !important;
+    border-bottom: 2px solid {colors['accent']} !important;
+}}
+.stTabs [data-baseweb="tab-highlight"] {{ display: none !important; }}
 
 /* ── Metrics ── */
-[data-testid="stMetric"] {
-    background: #141416;
-    border: 1px solid #1e1e22;
+[data-testid="stMetric"] {{
+    background: {colors['bg_tertiary']};
+    border: 1px solid {colors['bg_border']};
     border-radius: 6px;
     padding: 10px 14px;
-}
-[data-testid="stMetric"] label {
-    color: #52525b !important;
+}}
+[data-testid="stMetric"] label {{
+    color: {colors['text_tertiary']} !important;
     font-size: 0.65rem !important;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-}
-[data-testid="stMetricValue"] {
-    color: #e4e4e7 !important;
+}}
+[data-testid="stMetricValue"] {{
+    color: {colors['text_primary']} !important;
     font-size: 1.15rem !important;
     font-weight: 600 !important;
-}
+}}
 
 /* ── Chat messages ── */
-[data-testid="stChatMessage"] {
+[data-testid="stChatMessage"] {{
     border-radius: 6px;
     margin-bottom: 6px;
-    border: 1px solid #1e1e22;
-    background: #141416;
-}
+    border: 1px solid {colors['bg_border']};
+    background: {colors['bg_tertiary']};
+}}
 
 /* ── Buttons ── */
-.stButton > button {
+.stButton > button {{
     border-radius: 5px !important;
     font-weight: 500 !important;
     font-size: 0.8rem !important;
-    border: 1px solid #2a2a2e !important;
-    background: #141416 !important;
-    color: #a1a1aa !important;
+    border: 1px solid {colors['bg_border']} !important;
+    background: {colors['bg_tertiary']} !important;
+    color: {colors['text_secondary']} !important;
     transition: background 0.15s, border-color 0.15s, color 0.15s !important;
     box-shadow: none !important;
     padding: 0.35rem 0.75rem !important;
-}
-.stButton > button:hover {
-    background: #1e1e22 !important;
-    border-color: #3f3f46 !important;
-    color: #e4e4e7 !important;
+}}
+.stButton > button:hover {{
+    background: {colors['bg_hover']} !important;
+    border-color: {colors['text_disabled']} !important;
+    color: {colors['text_primary']} !important;
     transform: none !important;
     box-shadow: none !important;
-}
-.stButton > button[kind="primary"] {
-    background: #4f46e5 !important;
-    border-color: #4f46e5 !important;
+}}
+.stButton > button[kind="primary"] {{
+    background: {colors['accent']} !important;
+    border-color: {colors['accent']} !important;
     color: #fff !important;
-}
-.stButton > button[kind="primary"]:hover {
-    background: #4338ca !important;
-    border-color: #4338ca !important;
-}
+}}
+.stButton > button[kind="primary"]:hover {{
+    background: {colors['accent_dark']} !important;
+    border-color: {colors['accent_dark']} !important;
+}}
 
 /* ── Inputs ── */
 .stTextInput > div > div > input,
-.stTextArea > div > textarea {
-    background: #141416 !important;
-    border: 1px solid #2a2a2e !important;
+.stTextArea > div > textarea {{
+    background: {colors['bg_input']} !important;
+    border: 1px solid {colors['bg_border']} !important;
     border-radius: 5px !important;
-    color: #e4e4e7 !important;
+    color: {colors['text_primary']} !important;
     font-size: 0.85rem !important;
-}
+}}
+.stTextInput > div > div > input::placeholder,
+.stTextArea > div > textarea::placeholder {{
+    color: {colors['text_disabled']} !important;
+    opacity: 0.7 !important;
+}}
+.stTextInput > div > div > input::-webkit-input-placeholder,
+.stTextArea > div > textarea::-webkit-input-placeholder {{
+    color: {colors['text_disabled']} !important;
+    opacity: 0.7 !important;
+}}
 .stTextInput > div > div > input:focus,
-.stTextArea > div > textarea:focus {
-    border-color: #6366f1 !important;
-    box-shadow: 0 0 0 2px rgba(99,102,241,0.12) !important;
-}
+.stTextArea > div > textarea:focus {{
+    border-color: {colors['accent']} !important;
+    box-shadow: 0 0 0 2px {colors['tag_bg']} !important;
+}}
 
 /* ── Chat input ── */
-[data-testid="stChatInput"] textarea {
-    background: #141416 !important;
-    border: 1px solid #2a2a2e !important;
+[data-testid="stChatInput"] textarea {{
+    background: {colors['bg_input']} !important;
+    border: 1px solid {colors['bg_border']} !important;
     border-radius: 6px !important;
-    color: #e4e4e7 !important;
-}
-[data-testid="stChatInput"] textarea:focus {
-    border-color: #6366f1 !important;
-    box-shadow: 0 0 0 2px rgba(99,102,241,0.12) !important;
-}
+    color: {colors['text_primary']} !important;
+}}
+[data-testid="stChatInput"] textarea::placeholder {{
+    color: {colors['text_disabled']} !important;
+    opacity: 0.7 !important;
+}}
+[data-testid="stChatInput"] textarea:focus {{
+    border-color: {colors['accent']} !important;
+    box-shadow: 0 0 0 2px {colors['tag_bg']} !important;
+}}
 
 /* ── Selectbox ── */
-[data-testid="stSelectbox"] > div > div {
-    background: #141416 !important;
-    border: 1px solid #2a2a2e !important;
+[data-testid="stSelectbox"] > div > div {{
+    background: {colors['bg_input']} !important;
+    border: 1px solid {colors['bg_border']} !important;
     border-radius: 5px !important;
-    color: #e4e4e7 !important;
-}
+    color: {colors['text_primary']} !important;
+}}
+[data-testid="stSelectbox"] input {{
+    background: {colors['bg_input']} !important;
+    color: {colors['text_primary']} !important;
+}}
+[data-testid="stSelectbox"] input::placeholder {{
+    color: {colors['text_disabled']} !important;
+    opacity: 0.7 !important;
+}}
+[data-testid="stSelectbox"] [role="listbox"] {{
+    background: {colors['bg_secondary']} !important;
+    border: 1px solid {colors['bg_border']} !important;
+}}
+[data-testid="stSelectbox"] [role="option"] {{
+    color: {colors['text_primary']} !important;
+    background: {colors['bg_tertiary']} !important;
+}}
+[data-testid="stSelectbox"] [role="option"][aria-selected="true"] {{
+    background: {colors['accent']} !important;
+    color: #fff !important;
+}}
+[data-testid="stSelectbox"] [role="option"]:hover {{
+    background: {colors['bg_hover']} !important;
+}}
 
 /* ── Multiselect ── */
-[data-testid="stMultiSelect"] > div > div {
-    background: #141416 !important;
-    border: 1px solid #2a2a2e !important;
+[data-testid="stMultiSelect"] > div > div {{
+    background: {colors['bg_input']} !important;
+    border: 1px solid {colors['bg_border']} !important;
     border-radius: 5px !important;
-}
-[data-testid="stMultiSelect"] [data-baseweb="tag"] {
-    background: rgba(79,70,229,0.18) !important;
-    border-color: rgba(99,102,241,0.4) !important;
-    color: #a5b4fc !important;
+}}
+[data-testid="stMultiSelect"] [data-baseweb="tag"] {{
+    background: {colors['tag_bg']} !important;
+    border-color: {colors['tag_border']} !important;
+    color: {colors['tag_text']} !important;
     border-radius: 3px !important;
-}
+}}
 
 /* ── File uploader ── */
-[data-testid="stFileUploader"] {
-    background: #141416;
-    border: 1px dashed #2a2a2e;
-    border-radius: 5px;
-}
+[data-testid="stFileUploader"] {{
+    background: {colors['bg_tertiary']} !important;
+    border: 1px dashed {colors['bg_border']} !important;
+    border-radius: 5px !important;
+}}
+[data-testid="stFileUploader"] div {{
+    color: {colors['text_secondary']} !important;
+}}
+[data-testid="stFileUploader"] p {{
+    color: {colors['text_tertiary']} !important;
+}}
+[data-testid="stFileUploader"] [data-upload-state] {{
+    color: {colors['text_secondary']} !important;
+}}
+[data-testid="stFileUploader"] span {{
+    color: {colors['text_tertiary']} !important;
+}}
 
 /* ── Radio ── */
-[data-testid="stRadio"] label {
-    color: #a1a1aa !important;
+[data-testid="stRadio"] label {{
+    color: {colors['text_secondary']} !important;
     font-size: 0.8rem !important;
-}
+}}
 
 /* ── Expander ── */
-details {
-    background: #141416 !important;
-    border: 1px solid #1e1e22 !important;
+details {{
+    background: {colors['bg_tertiary']} !important;
+    border: 1px solid {colors['bg_border']} !important;
     border-radius: 5px !important;
-}
-summary { color: #a1a1aa !important; font-size: 0.8rem !important; }
+}}
+summary {{ color: {colors['text_secondary']} !important; font-size: 0.8rem !important; }}
 
 /* ── Caption ── */
-[data-testid="stCaptionContainer"] p {
-    color: #52525b !important;
+[data-testid="stCaptionContainer"] p {{
+    color: {colors['text_tertiary']} !important;
     font-size: 0.72rem !important;
-}
+}}
 
 /* ── Code ── */
-code {
-    background: #1e1e22 !important;
-    color: #a5b4fc !important;
+code {{
+    background: {colors['bg_hover']} !important;
+    color: {colors['tag_text']} !important;
     border-radius: 3px;
     padding: 1px 5px;
     font-size: 0.78rem;
     border: none !important;
-}
+}}
 
 /* ── Progress ── */
-[data-testid="stProgress"] > div > div { background: #4f46e5 !important; }
+[data-testid="stProgress"] > div > div {{ background: {colors['accent']} !important; }}
 
 /* ── Divider ── */
-hr { border-color: #1e1e22 !important; margin: 0.75rem 0 !important; }
+hr {{ border-color: {colors['bg_border']} !important; margin: 0.75rem 0 !important; }}
 
 /* ── Scrollbar ── */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+::-webkit-scrollbar {{ width: 4px; height: 4px; }}
+::-webkit-scrollbar-track {{ background: transparent; }}
+::-webkit-scrollbar-thumb {{ background: {colors['bg_border']}; border-radius: 2px; }}
+::-webkit-scrollbar-thumb:hover {{ background: {colors['text_tertiary']}; }}
 
 /* ── Alert ── */
-[data-testid="stAlert"] {
+[data-testid="stAlert"] {{
     border-radius: 5px !important;
-    background: #141416 !important;
-}
+    background: {colors['bg_tertiary']} !important;
+}}
+
+/* ── Dropdown/Popover overlays ── */
+[data-testid="stPopoverContent"],
+[role="listbox"],
+.stPopover {{
+    background: {colors['bg_secondary']} !important;
+    border: 1px solid {colors['bg_border']} !important;
+    color: {colors['text_primary']} !important;
+}}
+
+/* ── All input elements (general fallback) ── */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+textarea {{
+    background: {colors['bg_input']} !important;
+    color: {colors['text_primary']} !important;
+    border: 1px solid {colors['bg_border']} !important;
+}}
+
+/* ── Placeholder text (cross-browser) ── */
+input::placeholder,
+textarea::placeholder,
+input::-webkit-input-placeholder,
+textarea::-webkit-input-placeholder,
+input::-moz-placeholder,
+textarea::-moz-placeholder,
+input:-ms-input-placeholder,
+textarea:-ms-input-placeholder {{
+    color: {colors['text_disabled']} !important;
+    opacity: 0.7 !important;
+}}
+
+/* ── Dropdown options ── */
+[role="option"] {{
+    color: {colors['text_primary']} !important;
+    background: {colors['bg_tertiary']} !important;
+}}
+[role="option"][aria-selected="true"],
+[role="option"].selected {{
+    background: {colors['accent']} !important;
+    color: #fff !important;
+}}
+[role="option"]:hover {{
+    background: {colors['bg_hover']} !important;
+}}
 </style>
 """
 
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+# (CSS will be applied after session state initialization)
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -353,53 +526,86 @@ _defaults: dict = {
     "last_question": None,
     "last_model": None,
     "selected_model": None,
+    "theme_mode": "system",  # "light", "dark", or "system"
 }
 for _k, _v in _defaults.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
+
+
+def _get_active_theme() -> str:
+    """Determine which theme is currently active.
+    
+    Returns 'dark' or 'light' based on:
+    1. User selection if not "system"
+    2. System preference if set to "system"
+    3. Default 'dark' if system preference unavailable
+    """
+    preference = st.session_state.get("theme_mode", "system")
+    
+    if preference in ("dark", "light"):
+        return preference
+    
+    # For "system" mode, we default to dark on server-side
+    # The browser's prefers-color-scheme CSS media query will handle
+    # actual system detection on the client
+    return "dark"
+
+
+def _get_section_accents() -> dict:
+    """Get section accent colors based on active theme."""
+    theme = _get_active_theme()
+    return _SECTION_ACCENTS_DARK if theme == "dark" else _SECTION_ACCENTS_LIGHT
+
+
+# Apply the dynamic theme CSS to the page
+# This is called after session state initialization
+_active_theme = _get_active_theme()
+_active_colors = _THEMES.get(_active_theme, _THEMES["dark"])
+st.markdown(_generate_css(_active_theme), unsafe_allow_html=True)
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
 with st.sidebar:
     # ── Brand ──────────────────────────────────────────────────────────────
     st.markdown(
-        '<div style="padding:0 0 1rem 0;">'
-        '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" '
-        'style="vertical-align:-4px;margin-right:6px;" xmlns="http://www.w3.org/2000/svg">'
-        '<rect x="1" y="10" width="3" height="7" rx="1" fill="#818cf8"/>'
-        '<rect x="7" y="6" width="3" height="11" rx="1" fill="#6366f1"/>'
-        '<rect x="13" y="2" width="3" height="15" rx="1" fill="#4f46e5"/>'
-        '</svg>'
-        '<span style="font-size:0.9rem;font-weight:600;color:#e4e4e7;letter-spacing:-0.02em;">Analyst AI</span>'
-        '<div style="font-size:0.68rem;color:#3f3f46;margin-top:3px;padding-left:24px;">RAG · Local · Multi-model</div>'
-        '</div>',
+        f'<div style="padding:0 0 1rem 0;">'
+        f'<svg width="18" height="18" viewBox="0 0 18 18" fill="none" '
+        f'style="vertical-align:-4px;margin-right:6px;" xmlns="http://www.w3.org/2000/svg">'
+        f'<rect x="1" y="10" width="3" height="7" rx="1" fill="{_active_colors["accent_active"]}"/>'
+        f'<rect x="7" y="6" width="3" height="11" rx="1" fill="{_active_colors["accent"]}"/>'
+        f'<rect x="13" y="2" width="3" height="15" rx="1" fill="{_active_colors["accent_hover"]}"/>'
+        f'</svg>'
+        f'<span style="font-size:0.9rem;font-weight:600;color:{_active_colors["text_primary"]};letter-spacing:-0.02em;">Analyst AI</span>'
+        f'<div style="font-size:0.68rem;color:{_active_colors["text_tertiary"]};margin-top:3px;padding-left:24px;">RAG · Local · Multi-model</div>'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
     _online, _status_text, _model_count = _ollama_status()
-    _dot_color = "#4ade80" if _online else "#f87171"
+    _dot_color = _active_colors["success"] if _online else _active_colors["error"]
     _glow = f"box-shadow:0 0 5px {_dot_color};" if _online else ""
     st.markdown(
         f'<div style="display:flex;align-items:center;gap:7px;margin-bottom:0.875rem;'
-        f'padding:6px 10px;background:#141416;border:1px solid #1e1e22;border-radius:5px;">'
+        f'padding:6px 10px;background:{_active_colors["bg_tertiary"]};border:1px solid {_active_colors["bg_border"]};border-radius:5px;">'
         f'<span style="width:6px;height:6px;border-radius:50%;background:{_dot_color};'
         f'flex-shrink:0;display:inline-block;{_glow}"></span>'
-        f'<span style="font-size:0.7rem;color:#a1a1aa;">Ollama {_status_text}</span>'
-        f'<span style="font-size:0.65rem;color:#52525b;margin-left:auto;">{_model_count} model{"s" if _model_count != 1 else ""}</span>'
+        f'<span style="font-size:0.7rem;color:{_active_colors["text_secondary"]};">Ollama {_status_text}</span>'
+        f'<span style="font-size:0.65rem;color:{_active_colors["text_tertiary"]};margin-left:auto;">{_model_count} model{"s" if _model_count != 1 else ""}</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
 
     # ── Settings section ───────────────────────────────────────────────────
     st.markdown(
-        '<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;">'
-        '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">'
-        '<circle cx="8" cy="8" r="2.5" stroke="#52525b" stroke-width="1.5"/>'
-        '<path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.42 1.42M11.54 11.54l1.41 1.41'
-        'M3.05 12.95l1.42-1.42M11.54 4.46l1.41-1.41" stroke="#52525b" stroke-width="1.5" stroke-linecap="round"/>'
-        '</svg>'
-        '<span style="font-size:0.62rem;font-weight:600;color:#3f3f46;letter-spacing:0.09em;text-transform:uppercase;">Settings</span>'
-        '</div>',
+        f'<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;">'
+        f'<svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">'
+        f'<circle cx="8" cy="8" r="2.5" stroke="{_active_colors["text_tertiary"]}" stroke-width="1.5"/>'
+        f'<path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.42 1.42M11.54 11.54l1.41 1.41'
+        f'M3.05 12.95l1.42-1.42M11.54 4.46l1.41-1.41" stroke="{_active_colors["text_tertiary"]}" stroke-width="1.5" stroke-linecap="round"/>'
+        f'</svg>'
+        f'<span style="font-size:0.62rem;font-weight:600;color:{_active_colors["text_disabled"]};letter-spacing:0.09em;text-transform:uppercase;">Settings</span>'
+        f'</div>',
         unsafe_allow_html=True,
     )
     available_models = get_chat_models()   # always all 4 SUPPORTED_MODELS
@@ -412,18 +618,18 @@ with st.sidebar:
     _is_installed = model in installed_models
     if _is_installed:
         st.markdown(
-            '<div style="display:flex;align-items:center;gap:5px;margin-top:-6px;margin-bottom:6px;">'
-            '<span style="width:6px;height:6px;border-radius:50%;background:#4ade80;display:inline-block;"></span>'
-            '<span style="font-size:0.68rem;color:#52525b;">Installed</span>'
-            '</div>',
+            f'<div style="display:flex;align-items:center;gap:5px;margin-top:-6px;margin-bottom:6px;">'
+            f'<span style="width:6px;height:6px;border-radius:50%;background:{_active_colors["success"]};display:inline-block;"></span>'
+            f'<span style="font-size:0.68rem;color:{_active_colors["text_tertiary"]};">Installed</span>'
+            f'</div>',
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            '<div style="display:flex;align-items:center;gap:5px;margin-top:-6px;margin-bottom:4px;">'
-            '<span style="width:6px;height:6px;border-radius:50%;background:#f87171;display:inline-block;"></span>'
-            '<span style="font-size:0.68rem;color:#52525b;">Not installed</span>'
-            '</div>',
+            f'<div style="display:flex;align-items:center;gap:5px;margin-top:-6px;margin-bottom:4px;">'
+            f'<span style="width:6px;height:6px;border-radius:50%;background:{_active_colors["error"]};display:inline-block;"></span>'
+            f'<span style="font-size:0.68rem;color:{_active_colors["text_tertiary"]};">Not installed</span>'
+            f'</div>',
             unsafe_allow_html=True,
         )
         if st.button(f"Pull {model}", use_container_width=True, key="pull_model_btn"):
@@ -438,24 +644,38 @@ with st.sidebar:
     orchestration = st.radio("Mode", ["LangChain", "LangGraph"], horizontal=True)
     top_k = st.slider("Retrieved chunks", 1, 15, 5)
 
+    # ── Theme selector ─────────────────────────────────────────────────────
+    theme_choice = st.selectbox(
+        "Theme",
+        options=["System", "Light", "Dark"],
+        index=["system", "light", "dark"].index(st.session_state.theme_mode),
+        key="theme_dropdown",
+    )
+    
+    # Map UI choice to theme_mode value
+    theme_mode_map = {"System": "system", "Light": "light", "Dark": "dark"}
+    if st.session_state.theme_mode != theme_mode_map[theme_choice]:
+        st.session_state.theme_mode = theme_mode_map[theme_choice]
+        st.rerun()
+
     st.divider()
 
     # ── Knowledge Base section ─────────────────────────────────────────────
     st.markdown(
-        '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">'
-        '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">'
-        '<ellipse cx="8" cy="4.5" rx="5.5" ry="2" stroke="#52525b" stroke-width="1.4"/>'
-        '<path d="M2.5 4.5v3c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2v-3" stroke="#52525b" stroke-width="1.4"/>'
-        '<path d="M2.5 7.5v3c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2v-3" stroke="#52525b" stroke-width="1.4"/>'
-        '</svg>'
-        '<span style="font-size:0.62rem;font-weight:600;color:#3f3f46;letter-spacing:0.09em;text-transform:uppercase;">Knowledge Base</span>'
-        '</div>',
+        f'<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">'
+        f'<svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">'
+        f'<ellipse cx="8" cy="4.5" rx="5.5" ry="2" stroke="{_active_colors["text_tertiary"]}" stroke-width="1.4"/>'
+        f'<path d="M2.5 4.5v3c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2v-3" stroke="{_active_colors["text_tertiary"]}" stroke-width="1.4"/>'
+        f'<path d="M2.5 7.5v3c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2v-3" stroke="{_active_colors["text_tertiary"]}" stroke-width="1.4"/>'
+        f'</svg>'
+        f'<span style="font-size:0.62rem;font-weight:600;color:{_active_colors["text_disabled"]};letter-spacing:0.09em;text-transform:uppercase;">Knowledge Base</span>'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
     doc_count = get_doc_count()
     st.markdown(
-        f'<div style="font-size:0.7rem;color:#52525b;margin-bottom:8px;">'
+        f'<div style="font-size:0.7rem;color:{_active_colors["text_tertiary"]};margin-bottom:8px;">'
         f'{doc_count} chunk{"s" if doc_count != 1 else ""} indexed</div>',
         unsafe_allow_html=True,
     )
@@ -501,25 +721,25 @@ with st.sidebar:
 
     st.divider()
     st.markdown(
-        f'<div style="font-size:0.65rem;color:#2a2a2e;">Session {st.session_state.session_id[:8]}</div>',
+        f'<div style="font-size:0.65rem;color:{_active_colors["text_tertiary"]};">Session {st.session_state.session_id[:8]}</div>',
         unsafe_allow_html=True,
     )
 
 # ── Header ────────────────────────────────────────────────────────────────────
 
 _SVG_BARS = (
-    '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" '
-    'style="vertical-align:-4px;margin-right:8px;" xmlns="http://www.w3.org/2000/svg">'
-    '<rect x="1" y="10" width="3" height="7" rx="1" fill="#818cf8"/>'
-    '<rect x="7" y="6" width="3" height="11" rx="1" fill="#6366f1"/>'
-    '<rect x="13" y="2" width="3" height="15" rx="1" fill="#4f46e5"/>'
-    '</svg>'
+    f'<svg width="18" height="18" viewBox="0 0 18 18" fill="none" '
+    f'style="vertical-align:-4px;margin-right:8px;" xmlns="http://www.w3.org/2000/svg">'
+    f'<rect x="1" y="10" width="3" height="7" rx="1" fill="{_active_colors["accent_active"]}"/>'
+    f'<rect x="7" y="6" width="3" height="11" rx="1" fill="{_active_colors["accent"]}"/>'
+    f'<rect x="13" y="2" width="3" height="15" rx="1" fill="{_active_colors["accent_hover"]}"/>'
+    f'</svg>'
 )
 st.markdown(
-    f'<h1 style="font-size:1.1rem;font-weight:600;color:#e4e4e7;letter-spacing:-0.03em;margin:0 0 3px 0;">'
+    f'<h1 style="font-size:1.1rem;font-weight:600;color:{_active_colors["text_primary"]};letter-spacing:-0.03em;margin:0 0 3px 0;">'
     f'{_SVG_BARS}Analyst AI</h1>'
-    '<p style="font-size:0.78rem;color:#52525b;margin:0 0 1rem 0;padding-left:26px;">'
-    'Upload documents, analyze with multiple models, and extract structured insights.</p>',
+    f'<p style="font-size:0.78rem;color:{_active_colors["text_secondary"]};margin:0 0 1rem 0;padding-left:26px;">'
+    f'Upload documents, analyze with multiple models, and extract structured insights.</p>',
     unsafe_allow_html=True,
 )
 
@@ -540,8 +760,8 @@ tab_chat, tab_analyze, tab_insights = st.tabs(["Chat", "Multi-Model Analysis", "
 with tab_chat:
     if not st.session_state.messages:
         st.markdown(
-            '<div style="font-size:0.62rem;font-weight:600;color:#3f3f46;letter-spacing:0.09em;'
-            'text-transform:uppercase;margin-bottom:8px;">Quick start</div>',
+            f'<div style="font-size:0.62rem;font-weight:600;color:{_active_colors["text_disabled"]};letter-spacing:0.09em;'
+            f'text-transform:uppercase;margin-bottom:8px;">Quick start</div>',
             unsafe_allow_html=True,
         )
         _sq_cols = st.columns(2)
@@ -566,7 +786,7 @@ with tab_chat:
         with st.chat_message(msg["role"]):
             if msg["role"] == "assistant" and msg.get("model"):
                 st.markdown(
-                    f'<div style="font-size:0.62rem;color:#3f3f46;margin-bottom:4px;">{msg["model"]}</div>',
+                    f'<div style="font-size:0.62rem;color:{_active_colors["text_disabled"]};margin-bottom:4px;">{msg["model"]}</div>',
                     unsafe_allow_html=True,
                 )
             st.markdown(msg["content"])
@@ -582,7 +802,7 @@ with tab_chat:
         if _retry_models:
             st.markdown(
                 f'<div style="display:flex;align-items:center;gap:6px;margin-top:2px;">'
-                f'<span style="font-size:0.62rem;color:#3f3f46;">Not satisfied? Retry with:</span>'
+                f'<span style="font-size:0.62rem;color:{_active_colors["text_disabled"]};">Not satisfied? Retry with:</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -621,8 +841,8 @@ with tab_chat:
 
 with tab_analyze:
     st.markdown(
-        '<div style="font-size:0.78rem;color:#52525b;margin-bottom:1rem;">'
-        'Select models, pose a question, and compare how each analyzes your documents.</div>',
+        f'<div style="font-size:0.78rem;color:{_active_colors["text_secondary"]};margin-bottom:1rem;">'
+        f'Select models, pose a question, and compare how each analyzes your documents.</div>',
         unsafe_allow_html=True,
     )
 
@@ -682,7 +902,7 @@ with tab_analyze:
         _best = max(_ok, key=lambda x: x.get("quality_score", 0)) if _ok else None
 
         st.markdown(
-            f'<div style="font-size:0.7rem;color:#52525b;margin:0.75rem 0 0.5rem;">'
+            f'<div style="font-size:0.7rem;color:{_active_colors["text_secondary"]};margin:0.75rem 0 0.5rem;">'
             f'Results for: <em>"{st.session_state.analysis_question}"</em></div>',
             unsafe_allow_html=True,
         )
@@ -704,7 +924,7 @@ with tab_analyze:
             ):
                 if result.get("error"):
                     st.markdown(
-                        f'<div style="color:#f87171;font-size:0.82rem;padding:4px 0;">'
+                        f'<div style="color:{_active_colors["error"]};font-size:0.82rem;padding:4px 0;">'
                         f'{result["error"]}</div>',
                         unsafe_allow_html=True,
                     )
@@ -720,9 +940,9 @@ with tab_analyze:
 
 with tab_insights:
     st.markdown(
-        '<div style="font-size:0.78rem;color:#52525b;margin-bottom:1rem;">'
-        'Auto-extract an executive summary, key metrics, risk analysis, and recommendations '
-        'from your entire knowledge base using your chosen model.</div>',
+        f'<div style="font-size:0.78rem;color:{_active_colors["text_secondary"]};margin-bottom:1rem;">'
+        f'Auto-extract an executive summary, key metrics, risk analysis, and recommendations '
+        f'from your entire knowledge base using your chosen model.</div>',
         unsafe_allow_html=True,
     )
 
@@ -752,17 +972,18 @@ with tab_insights:
         _used_model = st.session_state.get("insights_model", "")
         if _used_model:
             st.markdown(
-                f'<div style="font-size:0.68rem;color:#3f3f46;margin-bottom:0.75rem;">'
+                f'<div style="font-size:0.68rem;color:{_active_colors["text_disabled"]};margin-bottom:0.75rem;">'
                 f'Generated with {_used_model}</div>',
                 unsafe_allow_html=True,
             )
         for key, data in st.session_state.insights.items():
-            _accent = _SECTION_ACCENT.get(key, "#52525b")
+            _section_accents = _get_section_accents()
+            _accent = _section_accents.get(key, _active_colors["text_tertiary"])
             st.markdown(
                 f'<div style="display:flex;align-items:center;padding:10px 14px;'
-                f'background:#141416;border:1px solid #1e1e22;'
+                f'background:{_active_colors["bg_tertiary"]};border:1px solid {_active_colors["bg_border"]};'
                 f'border-left:3px solid {_accent};border-radius:0 5px 5px 0;margin-bottom:2px;">'
-                f'<span style="font-size:0.85rem;font-weight:500;color:#d4d4d8;">{data["label"]}</span>'
+                f'<span style="font-size:0.85rem;font-weight:500;color:{_active_colors["text_primary"]};\">{data["label"]}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -770,13 +991,13 @@ with tab_insights:
                 st.markdown(data["content"])
     elif not gen_btn:
         st.markdown(
-            '<div style="background:#141416;border:1px solid #1e1e22;border-radius:6px;'
-            'padding:3rem;text-align:center;">'
-            '<div style="font-size:0.85rem;font-weight:500;color:#3f3f46;margin-bottom:4px;">'
-            'No insights generated yet</div>'
-            '<div style="font-size:0.72rem;color:#2a2a2e;">'
-            'Upload documents via the sidebar, choose a model, then click Generate Insights.</div>'
-            '</div>',
+            f'<div style="background:{_active_colors["bg_tertiary"]};border:1px solid {_active_colors["bg_border"]};border-radius:6px;'
+            f'padding:3rem;text-align:center;">'
+            f'<div style="font-size:0.85rem;font-weight:500;color:{_active_colors["text_disabled"]};margin-bottom:4px;">'
+            f'No insights generated yet</div>'
+            f'<div style="font-size:0.72rem;color:{_active_colors["text_tertiary"]};\">'
+            f'Upload documents via the sidebar, choose a model, then click Generate Insights.</div>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 

@@ -80,6 +80,11 @@ def get_installed_models() -> set[str]:
 def pull_model(model: str) -> tuple[bool, str]:
     """Pull a model from Ollama. Blocks until complete. Returns (success, message)."""
     settings = get_settings()
+    
+    # Validate model name format (basic check)
+    if not model or not model.strip():
+        return False, "Model name cannot be empty."
+    
     try:
         with httpx.stream(
             "POST",
@@ -91,8 +96,26 @@ def pull_model(model: str) -> tuple[bool, str]:
             for _ in resp.iter_lines():
                 pass              # consume stream so download actually completes
         return True, f"Successfully pulled {model}."
+    except httpx.HTTPStatusError as exc:
+        # Extract error message from response body if available
+        try:
+            error_data = exc.response.json()
+            error_msg = error_data.get("error", str(exc))
+        except:
+            error_msg = exc.response.text or str(exc)
+        
+        if exc.response.status_code == 400:
+            return False, f"Invalid model name '{model}'. Check spelling or model availability on Ollama registry."
+        elif exc.response.status_code == 404:
+            return False, f"Model '{model}' not found. Check the model name or ensure it exists on the Ollama registry."
+        else:
+            return False, f"Error pulling model: {error_msg}"
+    except httpx.ConnectError:
+        return False, f"Cannot connect to Ollama at {settings.ollama_base_url}. Ensure Ollama is running."
+    except httpx.ReadTimeout:
+        return False, f"Download timed out. The model may be too large for your connection. Try again."
     except Exception as exc:
-        return False, str(exc)
+        return False, f"Unexpected error: {str(exc)}"
 
 
 def _build_context(docs: list) -> str:
