@@ -8,9 +8,23 @@ Built on LangChain + LangGraph + ChromaDB + Streamlit.
 
 ## Quick Start
 
+### Docker (recommended)
+
+No local Python, Ollama, or model setup required. One command starts everything.
+
 ```bash
-# 1. Install Ollama and pull the recommended models
+git clone <repo-url> && cd rag-ai-chat-bot-with-langchain
+docker compose up --build
+```
+
+On first boot, Docker pulls `qwen2.5:7b` (~4.7 GB) and `nomic-embed-text` (~274 MB) automatically. The app starts at [http://localhost:8501](http://localhost:8501) once the models are ready. Subsequent starts are instant — models are cached in a Docker volume.
+
+### Local
+
+```bash
+# 1. Install Ollama and pull the required models
 brew install ollama && brew services start ollama   # macOS
+# curl -fsSL https://ollama.com/install.sh | sh    # Linux
 ollama pull qwen2.5:7b        # best for quiz generation (structured JSON output)
 ollama pull nomic-embed-text  # required for all RAG operations
 
@@ -20,14 +34,12 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # 3. (Optional) OCR support for scanned PDFs
-brew install tesseract         # macOS
-# sudo apt install tesseract-ocr  # Ubuntu/Debian
+brew install tesseract poppler   # macOS
+# sudo apt install tesseract-ocr poppler-utils  # Ubuntu/Debian
 
 # 4. Launch
 streamlit run app/ui.py
 ```
-
-Open [http://localhost:8501](http://localhost:8501). Upload a PDF or type a topic in **Quiz Prep** and start studying.
 
 ---
 
@@ -38,7 +50,8 @@ Open [http://localhost:8501](http://localhost:8501). Upload a PDF or type a topi
 - [Project Structure](#project-structure)
 - [Prerequisites](#prerequisites)
 - [Setup](#setup)
-- [Configuration Reference](#configuration-reference)
+  - [Docker setup](#docker-setup)
+  - [Local setup](#local-setup)
 - [Usage](#usage)
   - [Sidebar: Knowledge Base](#sidebar-knowledge-base)
   - [Chat Tab](#chat-tab)
@@ -203,19 +216,71 @@ rag-ai-chat-bot-with-langchain/
 
 ## Prerequisites
 
+### Docker path
+
+| Requirement | Notes |
+| --- | --- |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Docker + Compose plugin | v2.2+ for `service_completed_successfully` condition |
+
+That's it. Ollama, Python, and all models are managed inside containers.
+
+### Local path
+
 | Requirement | Notes |
 | --- | --- |
 | Python 3.11+ | |
 | [Ollama](https://ollama.com/) | Must be running before launching the app |
 | `nomic-embed-text` model | Required for all RAG and quiz operations |
-| Tesseract | Optional — only needed for scanned/image PDFs |
-| Docker + Docker Compose | Optional — for containerized deployment |
+| Tesseract + Poppler | Optional — only needed for scanned/image PDFs |
 
 ---
 
 ## Setup
 
-### 1. Install Ollama
+### Docker setup
+
+```bash
+git clone <repo-url>
+cd rag-ai-chat-bot-with-langchain
+docker compose up --build
+```
+
+**What happens on first boot:**
+
+1. `ollama` container starts and passes its healthcheck
+2. `ollama-init` pulls `qwen2.5:7b` and `nomic-embed-text` — this takes a few minutes on a fast connection
+3. `app` container starts once both models are confirmed ready
+
+Open [http://localhost:8501](http://localhost:8501).
+
+**Subsequent starts** skip the model download (volume is cached) and the app is up in seconds.
+
+**Storage:** models live in the `ollama_models` Docker volume. ChromaDB and uploaded PDFs live in the `chroma_data` volume and `./data/pdfs/`. Data persists across `docker compose down` / `docker compose up` cycles.
+
+```bash
+# Stop the stack
+docker compose down
+
+# Stop and wipe ALL data (models + vectors)
+docker compose down -v
+
+# See how much space the model volume uses
+docker volume inspect rag-ai-chat-bot-with-langchain_ollama_models
+
+# Run tests inside the app container
+docker compose exec app python -m pytest tests/ -v
+
+# Ingest PDFs from the data/pdfs/ directory
+docker compose exec app python -m scripts.ingest_pdfs
+```
+
+**GPU (NVIDIA):** uncomment the `deploy` block in the `ollama` service in `docker-compose.yml`.
+
+---
+
+### Local setup
+
+#### 1. Install Ollama
 
 ```bash
 # macOS
@@ -227,7 +292,7 @@ curl -fsSL https://ollama.com/install.sh | sh
 ollama serve &   # or use systemd — see ollama.com/docs
 ```
 
-### 2. Pull models
+#### 2. Pull models
 
 ```bash
 # Required
@@ -244,9 +309,9 @@ ollama pull llama3.2:3b        # ~2 GB — good balance
 ollama pull llama3.2:1b        # ~700 MB — fastest, lowest quality
 ```
 
-You can also pull models directly from the app sidebar without using the terminal.
+You can also pull models directly from the app sidebar.
 
-### 3. Clone and install
+#### 3. Clone and install
 
 ```bash
 git clone <repo-url>
@@ -259,9 +324,7 @@ source .venv/bin/activate        # macOS/Linux
 pip install -r requirements.txt
 ```
 
-### 4. (Optional) OCR for scanned PDFs
-
-Only needed if you have image-based or scanned PDFs.
+#### 4. (Optional) OCR for scanned PDFs
 
 ```bash
 # macOS
@@ -271,7 +334,7 @@ brew install tesseract poppler
 sudo apt install tesseract-ocr poppler-utils
 ```
 
-### 5. Environment variables
+#### 5. Environment variables
 
 ```bash
 cp .env.example .env
@@ -433,17 +496,23 @@ python -m scripts.query_cli "How does it differ from a BST?" --session-id sessio
 
 ### Docker
 
-```bash
-docker-compose up --build
-```
-
-Open [http://localhost:8501](http://localhost:8501).
-
-Ollama must be running on the host machine — the container connects via `host.docker.internal:11434`. PDFs and ChromaDB data are mounted as volumes so they persist across container restarts.
+See [Docker setup](#docker-setup) for the full walkthrough.
 
 ```bash
-# Ingest PDFs from inside the container
-docker-compose exec chatbot python -m scripts.ingest_pdfs
+# Start the full stack (Ollama + model init + app)
+docker compose up --build
+
+# Common operations while the stack is running
+docker compose exec app python -m scripts.ingest_pdfs       # ingest PDFs
+docker compose exec app python -m pytest tests/ -v          # run tests
+docker compose logs -f ollama-init                          # watch model download progress
+docker compose logs -f app                                  # stream app logs
+
+# Stop without losing data
+docker compose down
+
+# Full reset — removes volumes (models + vectors)
+docker compose down -v
 ```
 
 ---
