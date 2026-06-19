@@ -1,0 +1,14 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.env
+.venv
+venv
+data/chroma
+data/pdfs
+*.egg-info
+dist
+build
