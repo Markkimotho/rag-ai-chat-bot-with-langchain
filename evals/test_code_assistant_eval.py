@@ -33,7 +33,7 @@ def _collect_stream(path: str, body: dict) -> tuple[str, list[str]]:
     return "".join(text_parts), tools
 
 
-def test_code_assistant_returns_code_block():
+def test_code_assistant_returns_code_block(chat_model):
     text, _ = _collect_stream(
         "/api/code-chat/stream",
         {
@@ -42,6 +42,7 @@ def test_code_assistant_returns_code_block():
                 "number. Show it in a code block."
             ),
             "thread_id": "eval-code",
+            "model": chat_model,
         },
     )
     assert text.strip(), "assistant returned no text"
@@ -49,14 +50,18 @@ def test_code_assistant_returns_code_block():
     assert "def" in text, "expected a Python function definition"
 
 
-def test_code_assistant_remembers_context():
+def test_code_assistant_remembers_context(chat_model):
     thread = "eval-code-mem"
     _collect_stream(
         "/api/code-chat/stream",
-        {"message": "Remember the number 42.", "thread_id": thread},
+        {"message": "Remember the number 42.", "thread_id": thread, "model": chat_model},
     )
     text, _ = _collect_stream(
         "/api/code-chat/stream",
-        {"message": "What number did I ask you to remember?", "thread_id": thread},
+        {
+            "message": "What number did I ask you to remember?",
+            "thread_id": thread,
+            "model": chat_model,
+        },
     )
     assert "42" in text, f"assistant lost conversation memory: {text[:200]}"

@@ -52,7 +52,7 @@ def _valid_mcq(q: dict) -> bool:
     )
 
 
-def test_mcq_generation_quality():
+def test_mcq_generation_quality(chat_model):
     n = 5
     resp = client.post(
         "/api/quiz/generate",
@@ -62,6 +62,7 @@ def test_mcq_generation_quality():
             "n": n,
             "difficulty": "medium",
             "exam_type": "general exam",
+            "model": chat_model,
         },
     )
     assert resp.status_code == 200
@@ -73,10 +74,10 @@ def test_mcq_generation_quality():
     assert ratio >= 0.6, f"Only {ratio:.0%} of MCQs were well-formed: {questions}"
 
 
-def test_validation_grades_correct_answer():
+def test_validation_grades_correct_answer(chat_model):
     questions = client.post(
         "/api/quiz/generate",
-        json={"topic": _TOPIC, "question_type": "mcq", "n": 3},
+        json={"topic": _TOPIC, "question_type": "mcq", "n": 3, "model": chat_model},
     ).json()
     mcq = next((q for q in questions if _valid_mcq(q)), None)
     assert mcq is not None, "no well-formed MCQ to grade"
@@ -88,6 +89,7 @@ def test_validation_grades_correct_answer():
             "correct_answer": mcq["correct"],
             "student_answer": mcq["correct"],
             "question_type": "mcq",
+            "model": chat_model,
         },
     ).json()
     assert result["is_correct"] is True

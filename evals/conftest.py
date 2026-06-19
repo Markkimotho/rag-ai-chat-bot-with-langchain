@@ -10,25 +10,45 @@ import pytest
 
 from app.config import get_settings
 
+# Preference order for the chat model an eval will use. The first one that is
+# actually installed wins, so evals run against whatever is pulled.
+_PREFERRED = ["qwen2.5:7b", "llama3.1:8b", "mistral", "gemma2:9b"]
 
-def _ollama_ready() -> bool:
+
+def _installed_models() -> set[str]:
     settings = get_settings()
     try:
         r = httpx.get(f"{settings.ollama_base_url}/api/tags", timeout=3)
         r.raise_for_status()
-        names = {m["name"] for m in r.json().get("models", [])}
-        # Need the default chat model and an embedding model present.
-        has_chat = any(settings.ollama_model.split(":")[0] in n for n in names)
-        has_embed = any("embed" in n for n in names)
-        return has_chat and has_embed
+        return {m["name"] for m in r.json().get("models", [])}
     except Exception:
-        return False
+        return set()
+
+
+def _pick_chat_model(names: set[str]) -> str | None:
+    chat = [n for n in names if "embed" not in n]
+    for pref in _PREFERRED:
+        for n in chat:
+            if n.startswith(pref):
+                return n
+    return chat[0] if chat else None
+
+
+@pytest.fixture(scope="session")
+def chat_model() -> str:
+    """An installed, non-embedding chat model to drive evals with."""
+    model = _pick_chat_model(_installed_models())
+    assert model, "no installed chat model"
+    return model
 
 
 @pytest.fixture(scope="session", autouse=True)
 def require_ollama():
-    if not _ollama_ready():
+    names = _installed_models()
+    has_embed = any("embed" in n for n in names)
+    has_chat = _pick_chat_model(names) is not None
+    if not (has_embed and has_chat):
         pytest.skip(
-            "Ollama not ready (server down or models not pulled) — skipping evals.",
+            "Ollama not ready: need an embedding model + a chat model pulled.",
             allow_module_level=False,
         )
