@@ -14,6 +14,7 @@ import streamlit as st
 
 from app import chain as lcel_chain
 from app import graph as langgraph_module
+from app import quiz_agent as _quiz_agent_module
 from app.analysis import (
     generate_insights,
     get_chat_models,
@@ -24,6 +25,8 @@ from app.analysis import (
 from app.config import get_settings
 from app.ingestion import load_and_chunk_pdf
 from app.memory import clear_history
+from app.quiz import explain_concept, generate_questions, validate_answer
+from app.scraper import search_and_scrape
 from app.vectorstore import clear_vectorstore, get_doc_count, ingest_documents
 
 logging.basicConfig(
@@ -527,6 +530,22 @@ _defaults: dict = {
     "last_model": None,
     "selected_model": None,
     "theme_mode": "system",  # "light", "dark", or "system"
+    # ── Quiz Prep state ───────────────────────────────────────────────────────
+    "quiz_questions": [],
+    "quiz_idx": 0,
+    "quiz_answers": [],
+    "quiz_topic": "",
+    "quiz_type": "mcq",
+    "quiz_difficulty": "medium",
+    "quiz_exam_type": "General exam",
+    "quiz_n": 10,
+    "quiz_active": False,
+    "quiz_awaiting_next": False,
+    "quiz_last_result": None,
+    "quiz_model": None,
+    # ── Study Agent state ─────────────────────────────────────────────────────
+    "agent_messages": [],
+    "agent_session_id": str(uuid.uuid4()),
 }
 for _k, _v in _defaults.items():
     if _k not in st.session_state:
@@ -706,6 +725,34 @@ with st.sidebar:
         else:
             st.warning("Select at least one PDF first.")
 
+    # ── Web scrape by topic ────────────────────────────────────────────────
+    st.markdown(
+        f'<div style="font-size:0.62rem;font-weight:600;color:{_active_colors["text_disabled"]};'
+        f'letter-spacing:0.09em;text-transform:uppercase;margin:8px 0 4px;">Scrape Web</div>',
+        unsafe_allow_html=True,
+    )
+    _scrape_topic = st.text_input(
+        "Topic to scrape",
+        placeholder="e.g. Python decorators",
+        label_visibility="collapsed",
+        key="sidebar_scrape_topic",
+    )
+    if st.button("Search & Index", use_container_width=True, key="scrape_btn"):
+        if _scrape_topic.strip():
+            with st.spinner(f"Searching '{_scrape_topic}'..."):
+                try:
+                    _web_chunks = search_and_scrape(_scrape_topic.strip(), num_results=3)
+                    if _web_chunks:
+                        _wn = ingest_documents(_web_chunks)
+                        st.caption(f"Added {_wn} chunks from web")
+                        st.session_state.insights = None
+                    else:
+                        st.warning("No content found.")
+                except Exception as _exc:
+                    st.error(f"Scrape failed: {_exc}")
+        else:
+            st.warning("Enter a topic first.")
+
     _col_a, _col_b = st.columns(2)
     with _col_a:
         if st.button("Clear KB", use_container_width=True):
@@ -753,7 +800,9 @@ st.markdown("<div style='margin-bottom:0.25rem'></div>", unsafe_allow_html=True)
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
 
-tab_chat, tab_analyze, tab_insights = st.tabs(["Chat", "Multi-Model Analysis", "Insights"])
+tab_chat, tab_analyze, tab_insights, tab_quiz, tab_agent = st.tabs([
+    "Chat", "Multi-Model Analysis", "Insights", "Quiz Prep", "Study Agent",
+])
 
 # ════════════════════════════ TAB 1 — CHAT ════════════════════════════════════
 
@@ -999,5 +1048,457 @@ with tab_insights:
             f'Upload documents via the sidebar, choose a model, then click Generate Insights.</div>'
             f'</div>',
             unsafe_allow_html=True,
+        )
+
+# ═══════════════════════════ TAB 4 — QUIZ PREP ═══════════════════════════════
+
+with tab_quiz:
+
+    def _quiz_setup_panel() -> None:
+        """Render the quiz configuration panel."""
+        st.markdown(
+            f'<div style="font-size:0.78rem;color:{_active_colors["text_secondary"]};margin-bottom:1rem;">'
+            f'Upload study material via the sidebar (or use Scrape Web), then configure your quiz below.</div>',
+            unsafe_allow_html=True,
+        )
+
+        _q1, _q2 = st.columns(2)
+        with _q1:
+            _topic = st.text_input(
+                "Topic / subject",
+                value=st.session_state.quiz_topic,
+                placeholder="e.g. Binary search trees",
+                key="quiz_topic_input",
+            )
+        with _q2:
+            _qtype = st.selectbox(
+                "Question type",
+                ["mcq", "true_false", "short_answer", "mixed"],
+                index=["mcq", "true_false", "short_answer", "mixed"].index(
+                    st.session_state.quiz_type
+                ),
+                key="quiz_type_select",
+                format_func=lambda x: {
+                    "mcq": "Multiple Choice (MCQ)",
+                    "true_false": "True / False",
+                    "short_answer": "Short Answer",
+                    "mixed": "Mixed",
+                }[x],
+            )
+
+        _q3, _q4, _q5 = st.columns(3)
+        with _q3:
+            _n = st.selectbox("Questions", [5, 10, 15, 20], index=1, key="quiz_n_select")
+        with _q4:
+            _diff = st.selectbox(
+                "Difficulty",
+                ["easy", "medium", "hard", "mixed"],
+                index=1,
+                key="quiz_diff_select",
+            )
+        with _q5:
+            _exam = st.selectbox(
+                "Exam type",
+                [
+                    "General exam",
+                    "Technical interview",
+                    "Job interview",
+                    "Certification",
+                    "University exam",
+                    "Custom",
+                ],
+                key="quiz_exam_select",
+            )
+
+        _qm1, _qm2 = st.columns([3, 1])
+        with _qm1:
+            _qmodel = st.selectbox(
+                "Generation model",
+                available_models,
+                index=0,
+                key="quiz_model_select",
+                help="qwen2.5:7b is recommended for best structured JSON output",
+            )
+        with _qm2:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if _qmodel not in installed_models:
+                st.markdown(
+                    f'<span style="font-size:0.68rem;color:{_active_colors["error"]};">Not installed</span>',
+                    unsafe_allow_html=True,
+                )
+
+        _kb_empty = get_doc_count() == 0
+        if _kb_empty:
+            st.info(
+                "Knowledge base is empty. Upload a PDF or use **Scrape Web** in the sidebar before generating.",
+                icon=":material/info:",
+            )
+
+        _gen_disabled = _kb_empty or not _topic.strip()
+        if st.button(
+            "Generate Quiz",
+            type="primary",
+            use_container_width=True,
+            disabled=_gen_disabled,
+            key="gen_quiz_btn",
+        ):
+            st.session_state.quiz_topic = _topic.strip()
+            st.session_state.quiz_type = _qtype
+            st.session_state.quiz_n = _n
+            st.session_state.quiz_difficulty = _diff
+            st.session_state.quiz_exam_type = _exam
+            st.session_state.quiz_model = _qmodel
+            with st.spinner(f"Generating {_n} {_qtype} questions on '{_topic}'..."):
+                _qs = generate_questions(
+                    topic=_topic.strip(),
+                    question_type=_qtype,
+                    n=_n,
+                    difficulty=_diff,
+                    exam_type=_exam,
+                    model=_qmodel,
+                    top_k=get_settings().quiz_top_k,
+                )
+            if not _qs:
+                st.error(
+                    "Could not generate questions. "
+                    "Make sure the knowledge base has relevant content and the model is installed."
+                )
+            else:
+                st.session_state.quiz_questions = _qs
+                st.session_state.quiz_idx = 0
+                st.session_state.quiz_answers = []
+                st.session_state.quiz_active = True
+                st.session_state.quiz_awaiting_next = False
+                st.session_state.quiz_last_result = None
+                st.rerun()
+
+    def _render_question(q: dict, idx: int, total: int) -> None:
+        """Render a single question with answer input."""
+        qtype = q.get("type", "mcq")
+        difficulty = q.get("difficulty", "")
+        source = q.get("source", "")
+
+        pct = idx / total
+        st.progress(pct, text=f"Question {idx + 1} of {total}")
+
+        correct_so_far = sum(1 for a in st.session_state.quiz_answers if a["result"].get("is_correct"))
+        st.markdown(
+            f'<div style="display:flex;justify-content:space-between;margin-bottom:0.75rem;">'
+            f'<span style="font-size:0.68rem;color:{_active_colors["text_tertiary"]};">'
+            f'Type: {qtype.replace("_", " ").title()} · Difficulty: {difficulty}</span>'
+            f'<span style="font-size:0.68rem;color:{_active_colors["text_tertiary"]};">Score: {correct_so_far}/{idx}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            f'<div style="background:{_active_colors["bg_tertiary"]};border:1px solid {_active_colors["bg_border"]};'
+            f'border-radius:6px;padding:1rem 1.25rem;margin-bottom:1rem;">'
+            f'<div style="font-size:0.95rem;font-weight:500;color:{_active_colors["text_primary"]};">'
+            f'{q["question"]}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+        _answer_submitted = None
+
+        if qtype == "mcq":
+            opts = q.get("options", {})
+            _choices = [f"{k}: {v}" for k, v in sorted(opts.items())]
+            _sel = st.radio(
+                "Select your answer",
+                _choices,
+                key=f"quiz_radio_{idx}",
+                label_visibility="collapsed",
+            )
+            if st.button("Submit Answer", type="primary", key=f"submit_{idx}"):
+                _answer_submitted = _sel.split(":")[0].strip() if _sel else ""
+
+        elif qtype == "true_false":
+            _tf = st.radio(
+                "Select your answer",
+                ["True", "False"],
+                key=f"quiz_tf_{idx}",
+                horizontal=True,
+                label_visibility="collapsed",
+            )
+            if st.button("Submit Answer", type="primary", key=f"submit_{idx}"):
+                _answer_submitted = _tf.upper()
+
+        else:  # short_answer
+            _sa = st.text_area(
+                "Your answer",
+                placeholder="Write your answer here (2-4 sentences)...",
+                height=120,
+                key=f"quiz_sa_{idx}",
+                label_visibility="collapsed",
+            )
+            if st.button("Submit Answer", type="primary", key=f"submit_{idx}"):
+                _answer_submitted = _sa.strip()
+
+        if source:
+            st.markdown(
+                f'<div style="font-size:0.65rem;color:{_active_colors["text_tertiary"]};margin-top:4px;">'
+                f'Source: {source}</div>',
+                unsafe_allow_html=True,
+            )
+
+        if _answer_submitted is not None:
+            _correct = q.get("correct", q.get("sample_answer", ""))
+            _result = validate_answer(
+                question=q["question"],
+                correct_answer=_correct,
+                student_answer=_answer_submitted,
+                question_type=qtype,
+                model=st.session_state.quiz_model,
+            )
+            st.session_state.quiz_answers.append({
+                "question_idx": idx,
+                "question": q["question"],
+                "question_type": qtype,
+                "student_answer": _answer_submitted,
+                "correct_answer": _correct,
+                "result": _result,
+            })
+            st.session_state.quiz_awaiting_next = True
+            st.session_state.quiz_last_result = _result
+            st.rerun()
+
+    def _render_feedback(result: dict, q: dict) -> None:
+        """Render answer feedback after submission."""
+        is_correct = result.get("is_correct", False)
+        score = result.get("score", 0)
+        feedback = result.get("feedback", "")
+        hint = result.get("hint", "")
+        key_missed = result.get("key_missed", [])
+        explanation = q.get("explanation", q.get("sample_answer", ""))
+
+        _icon = _active_colors["success"] if is_correct else _active_colors["error"]
+        _label = "Correct!" if is_correct else f"Incorrect — {score}/100"
+        _symbol = "✓" if is_correct else "✗"
+
+        st.markdown(
+            f'<div style="background:{_active_colors["bg_tertiary"]};border:1px solid {_active_colors["bg_border"]};'
+            f'border-left:3px solid {_icon};border-radius:0 6px 6px 0;padding:0.75rem 1rem;margin-bottom:0.75rem;">'
+            f'<div style="font-size:0.85rem;font-weight:600;color:{_icon};margin-bottom:4px;">{_symbol} {_label}</div>'
+            f'<div style="font-size:0.8rem;color:{_active_colors["text_secondary"]};">{feedback}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        if explanation:
+            with st.expander("Explanation", expanded=not is_correct):
+                st.markdown(explanation)
+
+        if key_missed:
+            st.markdown(
+                f'<div style="font-size:0.72rem;color:{_active_colors["warning"]};margin-top:4px;">'
+                f'Missed concepts: {", ".join(key_missed)}</div>',
+                unsafe_allow_html=True,
+            )
+        if hint:
+            st.markdown(
+                f'<div style="font-size:0.72rem;color:{_active_colors["info"]};margin-top:2px;">'
+                f'Hint: {hint}</div>',
+                unsafe_allow_html=True,
+            )
+
+        _is_last = (st.session_state.quiz_idx + 1) >= len(st.session_state.quiz_questions)
+        _btn_label = "See Results" if _is_last else "Next Question →"
+        if st.button(_btn_label, type="primary", key="next_q_btn"):
+            st.session_state.quiz_idx += 1
+            st.session_state.quiz_awaiting_next = False
+            st.session_state.quiz_last_result = None
+            if _is_last:
+                st.session_state.quiz_active = False
+            st.rerun()
+
+    def _render_results() -> None:
+        """Render final quiz results with breakdown and weak-area recommendations."""
+        answers = st.session_state.quiz_answers
+        total = len(answers)
+        correct = sum(1 for a in answers if a["result"].get("is_correct"))
+        pct = int(correct / total * 100) if total else 0
+
+        _grade_color = (
+            _active_colors["success"] if pct >= 80
+            else _active_colors["warning"] if pct >= 60
+            else _active_colors["error"]
+        )
+
+        st.markdown(
+            f'<div style="text-align:center;padding:1.5rem;background:{_active_colors["bg_tertiary"]};'
+            f'border:1px solid {_active_colors["bg_border"]};border-radius:8px;margin-bottom:1.25rem;">'
+            f'<div style="font-size:2rem;font-weight:700;color:{_grade_color};">{pct}%</div>'
+            f'<div style="font-size:0.85rem;color:{_active_colors["text_secondary"]};">'
+            f'{correct} / {total} correct</div>'
+            f'<div style="font-size:0.72rem;color:{_active_colors["text_tertiary"]};margin-top:4px;">'
+            f'Topic: {st.session_state.quiz_topic} · {st.session_state.quiz_type.replace("_"," ").title()}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        _ra, _rb, _rc = st.columns(3)
+        _ra.metric("Score", f"{correct}/{total}")
+        _rb.metric("Accuracy", f"{pct}%")
+        _rc.metric("Questions", total)
+
+        st.markdown("<div style='margin-top:1rem'></div>", unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="font-size:0.62rem;font-weight:600;color:{_active_colors["text_disabled"]};'
+            f'letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px;">Question Breakdown</div>',
+            unsafe_allow_html=True,
+        )
+
+        _wrong_qs = []
+        for _ai, _a in enumerate(answers):
+            _is_c = _a["result"].get("is_correct", False)
+            _dot = _active_colors["success"] if _is_c else _active_colors["error"]
+            with st.expander(
+                f"Q{_ai + 1}: {_a['question'][:80]}{'…' if len(_a['question']) > 80 else ''}",
+                expanded=False,
+            ):
+                st.markdown(
+                    f'<span style="color:{_dot};font-weight:600;">'
+                    f'{"✓ Correct" if _is_c else "✗ Incorrect"}</span>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown(f"**Your answer:** {_a['student_answer']}")
+                if not _is_c:
+                    st.markdown(f"**Correct:** {_a['correct_answer']}")
+                    _wrong_qs.append(_a["question"])
+                _fb = _a["result"].get("feedback", "")
+                if _fb:
+                    st.markdown(_fb)
+
+        if _wrong_qs:
+            st.markdown("<div style='margin-top:1rem'></div>", unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-size:0.62rem;font-weight:600;color:{_active_colors["text_disabled"]};'
+                f'letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px;">Recommended Review</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f'<div style="background:{_active_colors["bg_tertiary"]};border:1px solid {_active_colors["bg_border"]};'
+                f'border-radius:6px;padding:0.75rem 1rem;font-size:0.8rem;color:{_active_colors["text_secondary"]};">'
+                f'You missed {len(_wrong_qs)} question(s). Use the <strong>Study Agent</strong> tab '
+                f'to ask for deeper explanations on these topics.</div>',
+                unsafe_allow_html=True,
+            )
+
+        _btn_c1, _btn_c2 = st.columns(2)
+        with _btn_c1:
+            if st.button("Retake Same Quiz", use_container_width=True, key="retake_btn"):
+                st.session_state.quiz_idx = 0
+                st.session_state.quiz_answers = []
+                st.session_state.quiz_active = True
+                st.session_state.quiz_awaiting_next = False
+                st.session_state.quiz_last_result = None
+                st.rerun()
+        with _btn_c2:
+            if st.button("New Quiz", use_container_width=True, type="primary", key="new_quiz_btn"):
+                st.session_state.quiz_questions = []
+                st.session_state.quiz_idx = 0
+                st.session_state.quiz_answers = []
+                st.session_state.quiz_active = False
+                st.session_state.quiz_awaiting_next = False
+                st.session_state.quiz_last_result = None
+                st.rerun()
+
+    # ── Quiz tab routing ──────────────────────────────────────────────────────
+
+    _qs = st.session_state.quiz_questions
+    _idx = st.session_state.quiz_idx
+    _active = st.session_state.quiz_active
+    _awaiting = st.session_state.quiz_awaiting_next
+
+    if not _qs or not _active:
+        _quiz_setup_panel()
+    elif _idx >= len(_qs):
+        _render_results()
+    elif _awaiting and st.session_state.quiz_last_result is not None:
+        _render_question(_qs[_idx - 1], _idx - 1, len(_qs))
+        _render_feedback(st.session_state.quiz_last_result, _qs[_idx - 1])
+    else:
+        _render_question(_qs[_idx], _idx, len(_qs))
+
+# ═══════════════════════════ TAB 5 — STUDY AGENT ═════════════════════════════
+
+with tab_agent:
+    st.markdown(
+        f'<div style="font-size:0.78rem;color:{_active_colors["text_secondary"]};margin-bottom:1rem;">'
+        f'An AI tutor with tool calling. It can search the web, generate quizzes, grade your answers, '
+        f'and explain concepts — all in one conversation.</div>',
+        unsafe_allow_html=True,
+    )
+
+    _ag_top_c1, _ag_top_c2, _ag_top_c3 = st.columns([3, 1, 1])
+    with _ag_top_c1:
+        _agent_model = st.selectbox(
+            "Agent model",
+            available_models,
+            index=0,
+            key="agent_model_select",
+            help="llama3.1:8b or qwen2.5:7b recommended — both support tool calling",
+        )
+    with _ag_top_c2:
+        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+        if _agent_model not in installed_models:
+            st.markdown(
+                f'<span style="font-size:0.68rem;color:{_active_colors["error"]};">Not installed</span>',
+                unsafe_allow_html=True,
+            )
+    with _ag_top_c3:
+        if st.button("New Session", use_container_width=True, key="agent_new_session"):
+            st.session_state.agent_messages = []
+            st.session_state.agent_session_id = str(uuid.uuid4())
+            st.rerun()
+
+    if not st.session_state.agent_messages:
+        _ag_examples = [
+            "Quiz me on Python async programming",
+            "Search for System Design interview prep and quiz me on it",
+            "Generate 5 behavioral interview questions",
+            "What topics are in my knowledge base?",
+        ]
+        st.markdown(
+            f'<div style="font-size:0.62rem;font-weight:600;color:{_active_colors["text_disabled"]};'
+            f'letter-spacing:0.09em;text-transform:uppercase;margin-bottom:8px;">Try these</div>',
+            unsafe_allow_html=True,
+        )
+        _eg_cols = st.columns(2)
+        for _ei, _eq in enumerate(_ag_examples):
+            with _eg_cols[_ei % 2]:
+                if st.button(_eq, key=f"agent_eg_{_ei}", use_container_width=True):
+                    st.session_state.agent_messages.append({"role": "user", "content": _eq})
+                    with st.spinner(f"Agent thinking ({_agent_model})..."):
+                        _ar = _quiz_agent_module.invoke_agent(
+                            _eq,
+                            thread_id=st.session_state.agent_session_id,
+                            model=_agent_model,
+                        )
+                    st.session_state.agent_messages.append({"role": "assistant", "content": _ar})
+                    st.rerun()
+        st.markdown("<div style='margin-bottom:1rem'></div>", unsafe_allow_html=True)
+
+    for _amsg in st.session_state.agent_messages:
+        with st.chat_message(_amsg["role"]):
+            st.markdown(_amsg["content"])
+
+    if _agent_prompt := st.chat_input(
+        f"Ask your tutor ({_agent_model})...", key="agent_chat_input"
+    ):
+        st.session_state.agent_messages.append({"role": "user", "content": _agent_prompt})
+        with st.chat_message("user"):
+            st.markdown(_agent_prompt)
+        with st.chat_message("assistant"):
+            with st.spinner(f"Agent thinking ({_agent_model})..."):
+                _agent_response = _quiz_agent_module.invoke_agent(
+                    _agent_prompt,
+                    thread_id=st.session_state.agent_session_id,
+                    model=_agent_model,
+                )
+            st.markdown(_agent_response)
+        st.session_state.agent_messages.append(
+            {"role": "assistant", "content": _agent_response}
         )
 
