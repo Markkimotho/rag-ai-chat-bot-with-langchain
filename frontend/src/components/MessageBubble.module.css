@@ -1,0 +1,107 @@
+.row {
+  display: flex;
+  margin-bottom: var(--space-4);
+}
+.user {
+  justify-content: flex-end;
+}
+.assistant {
+  justify-content: flex-start;
+}
+.bubble {
+  max-width: min(760px, 86%);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  animation: rise var(--dur-slow) var(--ease);
+}
+.user .bubble {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-bottom-right-radius: var(--radius-sm);
+}
+.assistant .bubble {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: var(--radius-sm);
+}
+.bubble[data-error="true"] {
+  background: color-mix(in srgb, var(--error) 8%, white);
+  border-color: color-mix(in srgb, var(--error) 30%, white);
+}
+.userText {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
+.model {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  margin-bottom: var(--space-2);
+  font-family: var(--font-mono);
+}
+.tools {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2);
+}
+.tool {
+  font-size: var(--fs-xs);
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  text-transform: capitalize;
+}
+.cursor {
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  vertical-align: text-bottom;
+  margin-left: 2px;
+  background: var(--accent);
+  animation: blink 1s steps(2, start) infinite;
+}
+.sources {
+  margin-top: var(--space-3);
+  font-size: var(--fs-sm);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-2);
+}
+.sources summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+.sources ul {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+  color: var(--text-dim);
+}
+.sources li {
+  margin: 2px 0;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes blink {
+  to {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bubble {
+    animation: none;
+  }
+  .cursor {
+    animation: none;
+  }
+}

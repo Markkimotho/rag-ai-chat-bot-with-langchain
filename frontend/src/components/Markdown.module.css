@@ -1,0 +1,25 @@
+.md {
+  font-size: var(--fs-md);
+  word-break: break-word;
+}
+.preWrap {
+  position: relative;
+}
+.copy {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 1;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+.preWrap:hover .copy,
+.copy:focus-visible {
+  opacity: 1;
+}

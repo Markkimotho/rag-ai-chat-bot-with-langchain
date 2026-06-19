@@ -1,0 +1,26 @@
+.wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--error) 8%, white);
+  border: 1px solid color-mix(in srgb, var(--error) 30%, white);
+  color: color-mix(in srgb, var(--error) 75%, black);
+  font-size: var(--fs-sm);
+}
+.msg {
+  flex: 1;
+}
+.retry {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+.retry:hover {
+  background: color-mix(in srgb, var(--error) 12%, white);
+}

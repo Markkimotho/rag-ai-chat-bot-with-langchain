@@ -13,6 +13,7 @@ across multiple Streamlit reruns as long as the process stays alive.
 
 import json
 import logging
+from collections.abc import Iterator
 
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
@@ -230,3 +231,45 @@ def invoke_agent(
     except Exception as exc:
         logger.exception("Agent invocation failed")
         return f"Agent error: {exc}"
+
+
+def stream_agent(
+    message: str,
+    thread_id: str = "default",
+    model: str | None = None,
+) -> Iterator[tuple[str, object]]:
+    """Stream the agent's response token-by-token.
+
+    Yields ("token", str) for assistant text deltas and ("tool", str) once per
+    tool the agent decides to call. Errors are surfaced as ("error", str).
+    """
+    settings = get_settings()
+    llm = ChatOllama(
+        model=model or settings.ollama_model,
+        base_url=settings.ollama_base_url,
+        temperature=0.2,
+    )
+    agent = create_react_agent(
+        llm,
+        _TOOLS,
+        state_modifier=_SYSTEM_PROMPT,
+        checkpointer=_checkpointer,
+    )
+    seen_tools: set[str] = set()
+    try:
+        for msg_chunk, _metadata in agent.stream(
+            {"messages": [HumanMessage(content=message)]},
+            config={"configurable": {"thread_id": thread_id}},
+            stream_mode="messages",
+        ):
+            for tc in getattr(msg_chunk, "tool_call_chunks", None) or []:
+                name = tc.get("name")
+                if name and name not in seen_tools:
+                    seen_tools.add(name)
+                    yield ("tool", name)
+            content = getattr(msg_chunk, "content", "")
+            if content:
+                yield ("token", content)
+    except Exception as exc:
+        logger.exception("Agent stream failed")
+        yield ("error", f"Agent error: {exc}")

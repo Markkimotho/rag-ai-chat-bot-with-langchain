@@ -1,5 +1,7 @@
 """LangChain LCEL RAG chain with conversation memory."""
 
+from collections.abc import Iterator
+
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_classic.chains.history_aware_retriever import create_history_aware_retriever
 from langchain_classic.chains.retrieval import create_retrieval_chain
@@ -52,3 +54,50 @@ def invoke(
     add_messages(session_id, question, answer)
 
     return {"answer": answer, "sources": sources}
+
+
+def _dedup_sources(sources: list[dict]) -> list[dict]:
+    seen: set = set()
+    out: list[dict] = []
+    for s in sources:
+        key = (s.get("source"), s.get("page"))
+        if key not in seen:
+            seen.add(key)
+            out.append(s)
+    return out
+
+
+def stream(
+    question: str,
+    session_id: str = "default",
+    model: str | None = None,
+    top_k: int | None = None,
+) -> Iterator[tuple[str, object]]:
+    """Stream a RAG answer token-by-token.
+
+    Yields ("token", str) for each answer delta, then a single
+    ("sources", list[dict]) event once retrieval context is known.
+    Conversation memory is updated after the stream completes.
+    """
+    chain = _build_chain(model=model, top_k=top_k)
+    chat_history = get_chat_history(session_id)
+
+    answer_parts: list[str] = []
+    sources: list[dict] = []
+
+    for chunk in chain.stream({"input": question, "chat_history": chat_history}):
+        if chunk.get("context"):
+            for doc in chunk["context"]:
+                sources.append(
+                    {
+                        "source": doc.metadata.get("source", "unknown"),
+                        "page": doc.metadata.get("page", "?"),
+                    }
+                )
+        token = chunk.get("answer")
+        if token:
+            answer_parts.append(token)
+            yield ("token", token)
+
+    yield ("sources", _dedup_sources(sources))
+    add_messages(session_id, question, "".join(answer_parts))

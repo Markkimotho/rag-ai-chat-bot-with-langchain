@@ -13,6 +13,11 @@ pytesseract>=0.3
 pydantic-settings>=2.0
 python-dotenv>=1.0
 
+# Web API (React frontend)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+
 # Quiz / web scraping
 beautifulsoup4>=4.12
 lxml>=5.0
@@ -21,3 +26,4 @@ duckduckgo-search>=6.0
 # Dev
 pytest>=8.0
 pytest-asyncio>=0.23
+httpx>=0.27  # also used by Starlette TestClient

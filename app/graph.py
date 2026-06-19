@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Annotated, Sequence, TypedDict
 
 from langchain_core.documents import Document
@@ -138,3 +139,45 @@ def invoke(
         )
 
     return {"answer": result["answer"], "sources": sources}
+
+
+def stream(
+    question: str,
+    thread_id: str = "default",
+    model: str | None = None,
+    top_k: int | None = None,
+) -> Iterator[tuple[str, object]]:
+    """Stream a RAG answer token-by-token via the LangGraph graph.
+
+    Yields ("token", str) for answer deltas produced by the `generate` node
+    only (contextualization tokens are filtered out), then a single
+    ("sources", list[dict]) event read from the final graph state.
+    """
+    graph = get_graph()
+    config: dict = {
+        "configurable": {"thread_id": thread_id, "model": model, "top_k": top_k}
+    }
+    inputs = {
+        "messages": [HumanMessage(content=question)],
+        "question": question,
+        "documents": [],
+        "answer": "",
+    }
+
+    for msg_chunk, metadata in graph.stream(inputs, config=config, stream_mode="messages"):
+        if metadata.get("langgraph_node") != "generate":
+            continue
+        token = getattr(msg_chunk, "content", "")
+        if token:
+            yield ("token", token)
+
+    state = graph.get_state(config)
+    documents = state.values.get("documents", []) if state else []
+    sources = [
+        {
+            "source": doc.metadata.get("source", "unknown"),
+            "page": doc.metadata.get("page", "?"),
+        }
+        for doc in documents
+    ]
+    yield ("sources", sources)

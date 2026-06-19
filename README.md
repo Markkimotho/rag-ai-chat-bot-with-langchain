@@ -2,7 +2,9 @@
 
 A fully local AI study tool that turns any document or web topic into interactive quizzes. Upload your PDFs, paste a URL, or just name a topic and it scrapes the web — then generates MCQ, True/False, and Short Answer questions, grades your answers with feedback, and explains concepts on demand. Everything runs on your machine via Ollama. No API keys. No cloud costs.
 
-Built on LangChain + LangGraph + ChromaDB + Streamlit.
+The primary interface is a **React** single-page app with a collapsible navbar and four sections — **Quiz Prep**, **Study Agent**, **Programming Assistant**, and **Regular Chat** — served by a **FastAPI** backend that streams responses token-by-token. The legacy Streamlit UI (which still hosts Multi-Model Analysis and Insights) remains available.
+
+Built on React + FastAPI + LangChain + LangGraph + ChromaDB + Ollama.
 
 ---
 
@@ -10,36 +12,45 @@ Built on LangChain + LangGraph + ChromaDB + Streamlit.
 
 ### Docker (recommended)
 
-No local Python, Ollama, or model setup required. One command starts everything.
+No local Python, Node, Ollama, or model setup required. One command starts everything.
 
 ```bash
 git clone <repo-url> && cd rag-ai-chat-bot-with-langchain
 docker compose up --build
 ```
 
-On first boot, Docker pulls `qwen2.5:7b` (~4.7 GB) and `nomic-embed-text` (~274 MB) automatically. The app starts at [http://localhost:8501](http://localhost:8501) once the models are ready. Subsequent starts are instant — models are cached in a Docker volume.
+On first boot, Docker pulls `qwen2.5:7b` (~4.7 GB) and `nomic-embed-text` (~274 MB) automatically, builds the React SPA, and starts the API. Open [http://localhost:8000](http://localhost:8000) once the models are ready. Subsequent starts are instant — models are cached in a Docker volume.
 
-### Local
+### Local development
+
+Two processes: the FastAPI backend and the Vite dev server (which proxies `/api` to the backend).
 
 ```bash
-# 1. Install Ollama and pull the required models
+# 0. Install Ollama and pull the required models
 brew install ollama && brew services start ollama   # macOS
 # curl -fsSL https://ollama.com/install.sh | sh    # Linux
-ollama pull qwen2.5:7b        # best for quiz generation (structured JSON output)
+ollama pull qwen2.5:7b        # chat, quiz, code, agent
 ollama pull nomic-embed-text  # required for all RAG operations
 
-# 2. Clone and install
+# 1. Backend
 git clone <repo-url> && cd rag-ai-chat-bot-with-langchain
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+uvicorn app.api:app --reload          # http://localhost:8000  (API + /docs)
 
-# 3. (Optional) OCR support for scanned PDFs
-brew install tesseract poppler   # macOS
-# sudo apt install tesseract-ocr poppler-utils  # Ubuntu/Debian
-
-# 4. Launch
-streamlit run app/ui.py
+# 2. Frontend (separate terminal)
+cd frontend
+npm install
+npm run dev                           # http://localhost:5173  (proxies /api → :8000)
 ```
+
+For a production-style local run, build the SPA once (`cd frontend && npm run build`) and the
+backend serves it directly at [http://localhost:8000](http://localhost:8000) — no Vite needed.
+
+Optional OCR for scanned PDFs: `brew install tesseract poppler` (macOS) or
+`sudo apt install tesseract-ocr poppler-utils` (Debian/Ubuntu).
+
+The legacy Streamlit UI is still runnable with `streamlit run app/ui.py` (port 8501).
 
 ---
 
@@ -161,14 +172,20 @@ flowchart LR
         Tools -.-> Web
     end
 
-    subgraph UI
-        Streamlit[Streamlit :8501]
+    subgraph CodeChat
+        CodeMsg[Code message] --> CodeLLM[Ollama LLM + coding prompt]
+        CodeLLM --> CodeOut[Streamed code answer]
     end
 
-    Streamlit --> RAG
-    Streamlit --> Quiz
-    Streamlit --> Agent
-    Streamlit --> Ingestion
+    subgraph UI
+        React[React SPA] --> FastAPI[FastAPI :8000 · JSON + SSE]
+    end
+
+    FastAPI --> RAG
+    FastAPI --> Quiz
+    FastAPI --> Agent
+    FastAPI --> CodeChat
+    FastAPI --> Ingestion
 ```
 
 ---
@@ -185,31 +202,44 @@ rag-ai-chat-bot-with-langchain/
 │   ├── retriever.py       # Similarity retriever with configurable top-K
 │   ├── memory.py          # Windowed chat history + LangGraph MemorySaver
 │   ├── prompts.py         # Shared prompt templates (contextualize + QA)
-│   ├── chain.py           # LangChain LCEL RAG chain
-│   ├── graph.py           # LangGraph stateful RAG graph
+│   ├── chain.py           # LangChain LCEL RAG chain (+ streaming)
+│   ├── graph.py           # LangGraph stateful RAG graph (+ streaming)
 │   ├── analysis.py        # Multi-model parallel analysis + insight generation
 │   ├── quiz.py            # Question generation, answer validation, concept explanation
 │   ├── scraper.py         # DuckDuckGo search + BeautifulSoup HTML scraper
-│   ├── quiz_agent.py      # LangGraph ReAct agent with 5 tools
-│   └── ui.py              # Streamlit UI — 5 tabs + sidebar
+│   ├── quiz_agent.py      # LangGraph ReAct agent with 5 tools (+ streaming)
+│   ├── code_assistant.py  # Programming Assistant — coding chat, no RAG (+ streaming)
+│   ├── api_models.py      # Pydantic request/response models (HTTP contract)
+│   ├── api.py             # FastAPI app — JSON + SSE routes, serves the React SPA
+│   └── ui.py              # Legacy Streamlit UI (Analysis + Insights live here)
+├── frontend/              # React + Vite + TypeScript SPA
+│   ├── src/
+│   │   ├── api/           # typed client, SSE stream parser, shared types
+│   │   ├── components/    # AppLayout, Sidebar, TopBar, ChatPanel, Markdown, …
+│   │   ├── context/       # ModelContext, KnowledgeBaseContext
+│   │   ├── hooks/         # useStreamingChat, useMediaQuery
+│   │   ├── sections/      # QuizPrep, StudyAgent, ProgrammingAssistant, RegularChat
+│   │   ├── styles/        # theme.css (design tokens), global.css
+│   │   └── __tests__/     # Vitest + React Testing Library
+│   ├── package.json
+│   └── vite.config.ts
 ├── scripts/
 │   ├── ingest_pdfs.py     # CLI: bulk PDF ingestion
 │   └── query_cli.py       # CLI: headless question answering
-├── tests/
-│   ├── test_ingestion.py  # PDF pipeline, chunk IDs, metadata
-│   ├── test_retriever.py  # Retriever top-K configuration
-│   ├── test_chain.py      # LCEL chain with mocked LLM
-│   ├── test_graph.py      # LangGraph node-level tests
-│   ├── test_quiz.py       # JSON extraction, MCQ/TF grading, question generation
-│   ├── test_scraper.py    # HTML extraction, URL scraping, DDG search + fallback
-│   └── test_quiz_agent.py # Agent tool wrappers, error handling, n-clamping
-├── data/
-│   ├── pdfs/              # Drop PDFs here for CLI ingestion (gitignored)
-│   └── chroma/            # ChromaDB storage (gitignored)
-├── .env.example
+├── tests/                 # Backend gate tests (deterministic, mocked)
+│   ├── test_ingestion.py  test_retriever.py  test_chain.py  test_graph.py
+│   ├── test_quiz.py  test_scraper.py  test_quiz_agent.py
+│   ├── test_api.py        # FastAPI routes + SSE framing (mocked engine)
+│   └── test_code_assistant.py  # Programming Assistant (mocked Ollama)
+├── evals/                 # Paid LLM evals (real Ollama, @pytest.mark.eval)
+│   ├── conftest.py        # skips when Ollama/models unavailable
+│   ├── test_quiz_eval.py
+│   └── test_code_assistant_eval.py
+├── data/                  # pdfs/ (CLI ingestion) + chroma/ storage (gitignored)
 ├── requirements.txt
-├── Dockerfile
-└── docker-compose.yml
+├── Dockerfile             # Multi-stage: builds SPA, serves it via FastAPI
+├── Dockerfile.streamlit   # Legacy Streamlit image
+└── docker-compose.yml     # ollama + ollama-init + web (FastAPI :8000)
 ```
 
 ---
@@ -249,9 +279,9 @@ docker compose up --build
 
 1. `ollama` container starts and passes its healthcheck
 2. `ollama-init` pulls `qwen2.5:7b` and `nomic-embed-text` — this takes a few minutes on a fast connection
-3. `app` container starts once both models are confirmed ready
+3. `web` container builds the React SPA and starts the FastAPI server once both models are ready
 
-Open [http://localhost:8501](http://localhost:8501).
+Open [http://localhost:8000](http://localhost:8000).
 
 **Subsequent starts** skip the model download (volume is cached) and the app is up in seconds.
 
@@ -267,11 +297,11 @@ docker compose down -v
 # See how much space the model volume uses
 docker volume inspect rag-ai-chat-bot-with-langchain_ollama_models
 
-# Run tests inside the app container
-docker compose exec app python -m pytest tests/ -v
+# Run backend tests inside the web container
+docker compose exec web python -m pytest tests/ -v
 
 # Ingest PDFs from the data/pdfs/ directory
-docker compose exec app python -m scripts.ingest_pdfs
+docker compose exec web python -m scripts.ingest_pdfs
 ```
 
 **GPU (NVIDIA):** uncomment the `deploy` block in the `ollama` service in `docker-compose.yml`.
@@ -345,6 +375,23 @@ All variables have sensible defaults. The app works out of the box without editi
 ---
 
 ## Usage
+
+### Web UI (React)
+
+The React app (default, [http://localhost:8000](http://localhost:8000)) has a **collapsible left navbar** with four sections and a **top bar** holding the model picker, Ollama status, and knowledge-base controls (upload PDF, scrape a topic, chunk count, clear). Each section has its own accent color, so the UI shifts hue as you move between them. The sidebar collapses to an icon rail on desktop and becomes a drawer on mobile.
+
+| Section | What it does |
+| --- | --- |
+| **Quiz Prep** | Configure a quiz (topic, type, count, difficulty, exam type), then take it question-by-question with instant grading, explanations, and a final score breakdown. |
+| **Study Agent** | A tool-calling LangGraph tutor that can search the web, build the knowledge base, quiz you, grade answers, and explain — streamed, with tool-use chips. |
+| **Programming Assistant** | A coding chat (no document grounding) with syntax-highlighted, copy-able code blocks. |
+| **Regular Chat** | RAG document Q&A with source citations and a LangChain/LangGraph mode toggle. |
+
+All chat responses stream token-by-token over SSE. Upload a PDF or scrape a topic from the top bar before using Quiz Prep or Regular Chat.
+
+---
+
+> The sections below document the **legacy Streamlit UI** (`streamlit run app/ui.py`, port 8501), which additionally hosts Multi-Model Analysis and Insights. The React UI mirrors Quiz Prep, Study Agent, and Regular Chat, and adds the Programming Assistant.
 
 ### Sidebar: Knowledge Base
 
@@ -499,14 +546,14 @@ python -m scripts.query_cli "How does it differ from a BST?" --session-id sessio
 See [Docker setup](#docker-setup) for the full walkthrough.
 
 ```bash
-# Start the full stack (Ollama + model init + app)
+# Start the full stack (Ollama + model init + React/FastAPI web)
 docker compose up --build
 
 # Common operations while the stack is running
-docker compose exec app python -m scripts.ingest_pdfs       # ingest PDFs
-docker compose exec app python -m pytest tests/ -v          # run tests
+docker compose exec web python -m scripts.ingest_pdfs       # ingest PDFs
+docker compose exec web python -m pytest tests/ -v          # run tests
 docker compose logs -f ollama-init                          # watch model download progress
-docker compose logs -f app                                  # stream app logs
+docker compose logs -f web                                  # stream web/API logs
 
 # Stop without losing data
 docker compose down
@@ -655,20 +702,22 @@ After changing `CHUNK_SIZE` or `CHUNK_OVERLAP`, re-ingest documents for the chan
 
 ## Testing
 
-All 54 tests are deterministic — no running Ollama instance or network access required.
+Two lanes: **gate tests** (deterministic, mocked, no Ollama/network) run on every change;
+**evals** (paid, real Ollama) run before ship.
 
 ```bash
-# Run everything
+# Backend gate tests — deterministic, no Ollama
 pytest tests/ -v
 
-# Run a specific module
-pytest tests/test_quiz.py -v
-pytest tests/test_scraper.py -v
-pytest tests/test_quiz_agent.py -v
+# Frontend gate tests — Vitest + React Testing Library
+cd frontend && npm run test
 
-# Run a single test
-pytest tests/test_quiz.py::test_validate_mcq_correct -v
+# Evals — require a running Ollama with qwen2.5:7b + nomic-embed-text pulled.
+# Skip cleanly (not fail) when models are unavailable.
+pytest evals/ -m eval -v
 ```
+
+### Backend gate tests (`tests/`)
 
 | Test file | What is covered |
 | --- | --- |
@@ -676,15 +725,35 @@ pytest tests/test_quiz.py::test_validate_mcq_correct -v
 | `test_retriever.py` | Default and custom top-K configuration |
 | `test_chain.py` | LCEL chain invoke, source extraction, empty context |
 | `test_graph.py` | Node-level: contextualize (with/without history), retrieve, generate |
-| `test_quiz.py` | JSON extraction (plain, markdown-fenced, embedded), MCQ/TF deterministic grading, short-answer LLM grading, generation from mocked retriever + LLM, error handling |
-| `test_scraper.py` | HTML extraction, script/nav stripping, URL scraping, sparse content handling, HTTP errors, DDG search, Wikipedia fallback, max_chunks cap |
-| `test_quiz_agent.py` | All 5 tool wrappers, empty KB, HTTP errors, n-clamping, delegation correctness |
+| `test_quiz.py` | JSON extraction, MCQ/TF deterministic grading, short-answer LLM grading, generation, error handling |
+| `test_scraper.py` | HTML extraction, script/nav stripping, URL scraping, HTTP errors, DDG search, Wikipedia fallback |
+| `test_quiz_agent.py` | All 5 tool wrappers, empty KB, errors, n-clamping, delegation |
+| `test_api.py` | FastAPI routes, validation errors, KB upload/scrape, SSE event framing + ordering (mocked engine) |
+| `test_code_assistant.py` | Coding system prompt, per-thread memory, thread isolation, streaming, error handling |
+
+### Frontend gate tests (`frontend/src/__tests__/`)
+
+| Test file | What is covered |
+| --- | --- |
+| `stream.test.ts` | SSE frame parsing, partial-frame buffering, streaming POST event order, error path |
+| `client.test.ts` | Typed fetch wrapper: JSON serialization, multipart upload, `ApiError` mapping |
+| `quizReducer.test.ts` | Quiz state machine transitions (setup → question → feedback → results), scoring |
+| `useStreamingChat.test.tsx` | Token accumulation, sources attach, error flag, ignore-while-streaming |
+| `Sidebar.test.tsx` | Sections render, `aria-current` active item, collapse callback, rail labels, mobile-drawer Esc |
+| `ChatPanel.test.tsx` | Empty state, message render, submit/Enter send + clear, Stop while streaming |
+
+### Evals (`evals/`)
+
+| Eval file | Threshold |
+| --- | --- |
+| `test_quiz_eval.py` | ≥60% of generated MCQs are well-formed; a known-correct answer grades 100 |
+| `test_code_assistant_eval.py` | Response is non-empty, contains a fenced code block, and retains conversation memory |
 
 ---
 
 ## Roadmap
 
-- [ ] Streaming responses (token-by-token output)
+- [x] Streaming responses (token-by-token output) — shipped via SSE
 - [ ] Spaced repetition — resurface questions you answered wrong on a schedule
 - [ ] Question bank export (JSON / CSV / Anki format)
 - [ ] Support for DOCX, TXT, HTML, EPUB ingestion

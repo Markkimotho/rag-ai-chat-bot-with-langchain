@@ -1,0 +1,295 @@
+"""FastAPI backend for the Exam Prep AI React frontend.
+
+This is a thin adapter: every route delegates to an existing engine module in
+`app/` and shapes the result for HTTP. Conversational endpoints stream tokens
+over Server-Sent Events (SSE); everything else is plain JSON.
+
+Run (dev):   uvicorn app.api:app --reload
+Run (prod):  uvicorn app.api:app --host 0.0.0.0 --port 8000
+In production the built React SPA in frontend/dist is served at "/".
+"""
+
+import json
+import logging
+import tempfile
+from collections.abc import Iterator
+from pathlib import Path
+
+import httpx
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from app import chain as lcel_chain
+from app import code_assistant
+from app import graph as langgraph_module
+from app import quiz_agent
+from app.analysis import get_chat_models, get_installed_models, pull_model
+from app.api_models import (
+    AgentRequest,
+    ChatRequest,
+    ClearResponse,
+    CodeChatRequest,
+    CountResponse,
+    ExplainRequest,
+    ExplainResponse,
+    HealthResponse,
+    IngestResponse,
+    ModelsResponse,
+    PullRequest,
+    PullResponse,
+    QuizGenerateRequest,
+    QuizValidateRequest,
+    ScrapeRequest,
+)
+from app.config import get_settings
+from app.ingestion import load_and_chunk_pdf
+from app.memory import clear_history
+from app.quiz import explain_concept, generate_questions, validate_answer
+from app.scraper import search_and_scrape
+from app.vectorstore import clear_vectorstore, get_doc_count, ingest_documents
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s -- %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(title="Exam Prep AI", version="1.0.0")
+
+# Dev: Vite serves the SPA on :5173 and proxies /api here. Allow it for CORS.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ── SSE helper ────────────────────────────────────────────────────────────────
+
+
+def _sse(events: Iterator[tuple[str, object]]) -> StreamingResponse:
+    """Wrap an engine generator of (kind, payload) tuples as an SSE response.
+
+    Emits one JSON object per event, then a terminal {"type":"done"} frame.
+    """
+
+    def gen() -> Iterator[str]:
+        try:
+            for kind, payload in events:
+                if kind == "token":
+                    frame = {"type": "token", "text": payload}
+                elif kind == "sources":
+                    frame = {"type": "sources", "sources": payload}
+                elif kind == "tool":
+                    frame = {"type": "tool", "name": payload}
+                elif kind == "error":
+                    frame = {"type": "error", "message": payload}
+                else:
+                    continue
+                yield f"data: {json.dumps(frame)}\n\n"
+        except Exception as exc:  # noqa: BLE001 — surface any engine failure to client
+            logger.exception("SSE stream failed")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+        finally:
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ── Health / models ─────────────────────────────────────────────────────────
+
+
+@app.get("/api/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    settings = get_settings()
+    try:
+        r = httpx.get(f"{settings.ollama_base_url}/api/tags", timeout=3)
+        r.raise_for_status()
+        models = [m for m in r.json().get("models", []) if "embed" not in m["name"]]
+        return HealthResponse(online=True, model_count=len(models))
+    except Exception:
+        return HealthResponse(online=False, model_count=0)
+
+
+@app.get("/api/models", response_model=ModelsResponse)
+def models() -> ModelsResponse:
+    return ModelsResponse(
+        supported=get_chat_models(),
+        installed=sorted(get_installed_models()),
+    )
+
+
+@app.post("/api/models/pull", response_model=PullResponse)
+def models_pull(req: PullRequest) -> PullResponse:
+    ok, message = pull_model(req.model)
+    return PullResponse(ok=ok, message=message)
+
+
+# ── Knowledge base ────────────────────────────────────────────────────────────
+
+
+@app.get("/api/kb/count", response_model=CountResponse)
+def kb_count() -> CountResponse:
+    return CountResponse(count=get_doc_count())
+
+
+@app.post("/api/kb/upload", response_model=IngestResponse)
+async def kb_upload(files: list[UploadFile] = File(...)) -> IngestResponse:
+    total = 0
+    details: list[str] = []
+    for f in files:
+        if not (f.filename or "").lower().endswith(".pdf"):
+            details.append(f"{f.filename}: skipped (not a PDF)")
+            continue
+        data = await f.read()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(data)
+            tmp_path = Path(tmp.name)
+        try:
+            chunks = load_and_chunk_pdf(tmp_path)
+            n = ingest_documents(chunks)
+            total += n
+            details.append(f"{f.filename}: {n} chunks")
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Upload failed for %s", f.filename)
+            details.append(f"{f.filename}: failed — {exc}")
+        finally:
+            tmp_path.unlink(missing_ok=True)
+    return IngestResponse(chunks_added=total, detail="; ".join(details))
+
+
+@app.post("/api/kb/scrape", response_model=IngestResponse)
+def kb_scrape(req: ScrapeRequest) -> IngestResponse:
+    try:
+        chunks = search_and_scrape(req.topic.strip(), num_results=req.num_results)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Scrape failed")
+        raise HTTPException(status_code=502, detail=f"Scrape failed: {exc}") from exc
+    if not chunks:
+        return IngestResponse(chunks_added=0, detail="No content found.")
+    n = ingest_documents(chunks)
+    return IngestResponse(chunks_added=n, detail=f"Added {n} chunks from web.")
+
+
+@app.delete("/api/kb", response_model=ClearResponse)
+def kb_clear() -> ClearResponse:
+    clear_vectorstore()
+    return ClearResponse(cleared=True)
+
+
+# ── Chat (Regular Chat, RAG) — streaming ────────────────────────────────────
+
+
+@app.post("/api/chat/stream")
+def chat_stream(req: ChatRequest) -> StreamingResponse:
+    if req.mode == "langgraph":
+        events = langgraph_module.stream(
+            question=req.question,
+            thread_id=req.session_id,
+            model=req.model,
+            top_k=req.top_k,
+        )
+    else:
+        events = lcel_chain.stream(
+            question=req.question,
+            session_id=req.session_id,
+            model=req.model,
+            top_k=req.top_k,
+        )
+    return _sse(events)
+
+
+@app.delete("/api/chat/{session_id}", response_model=ClearResponse)
+def chat_clear(session_id: str) -> ClearResponse:
+    clear_history(session_id)
+    return ClearResponse(cleared=True)
+
+
+# ── Programming assistant — streaming ───────────────────────────────────────
+
+
+@app.post("/api/code-chat/stream")
+def code_chat_stream(req: CodeChatRequest) -> StreamingResponse:
+    events = code_assistant.stream_code_assistant(
+        message=req.message, thread_id=req.thread_id, model=req.model
+    )
+    return _sse(events)
+
+
+# ── Study agent — streaming ─────────────────────────────────────────────────
+
+
+@app.post("/api/agent/stream")
+def agent_stream(req: AgentRequest) -> StreamingResponse:
+    events = quiz_agent.stream_agent(
+        message=req.message, thread_id=req.thread_id, model=req.model
+    )
+    return _sse(events)
+
+
+# ── Quiz ───────────────────────────────────────────────────────────────────
+
+
+@app.post("/api/quiz/generate")
+def quiz_generate(req: QuizGenerateRequest) -> list[dict]:
+    return generate_questions(
+        topic=req.topic.strip(),
+        question_type=req.question_type,
+        n=req.n,
+        difficulty=req.difficulty,
+        exam_type=req.exam_type,
+        model=req.model,
+        top_k=get_settings().quiz_top_k,
+    )
+
+
+@app.post("/api/quiz/validate")
+def quiz_validate(req: QuizValidateRequest) -> dict:
+    return validate_answer(
+        question=req.question,
+        correct_answer=req.correct_answer,
+        student_answer=req.student_answer,
+        question_type=req.question_type,
+        model=req.model,
+    )
+
+
+@app.post("/api/quiz/explain", response_model=ExplainResponse)
+def quiz_explain(req: ExplainRequest) -> ExplainResponse:
+    return ExplainResponse(explanation=explain_concept(req.concept, model=req.model))
+
+
+# ── Static SPA (production) ─────────────────────────────────────────────────
+# Mounted last so it never shadows /api routes. Real files (e.g. /assets/*) are
+# served directly; any other path falls back to index.html so client-side
+# routing (BrowserRouter deep links like /quiz) works. Only mounted if a build
+# exists — otherwise the API runs standalone behind the Vite dev server.
+
+_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+
+class SPAStaticFiles(StaticFiles):
+    """StaticFiles that serves index.html for unknown (non-file) routes."""
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code == 404:
+                return await super().get_response("index.html", scope)
+            raise
+
+
+if _DIST.is_dir():
+    app.mount("/", SPAStaticFiles(directory=str(_DIST), html=True), name="spa")
+    logger.info("Serving SPA from %s", _DIST)
+else:
+    logger.info("No SPA build at %s — API-only mode (use Vite dev server).", _DIST)

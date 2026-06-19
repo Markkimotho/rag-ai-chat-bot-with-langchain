@@ -1,0 +1,40 @@
+.wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: bounce 1s var(--ease) infinite;
+}
+.dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.label {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+@keyframes bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot {
+    animation: none;
+    opacity: 0.7;
+  }
+}

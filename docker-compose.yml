@@ -42,13 +42,13 @@ services:
       "
     restart: "no"
 
-  app:
+  web:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: exam-prep-app
+    container_name: exam-prep-web
     ports:
-      - "8501:8501"
+      - "8000:8000"
     depends_on:
       ollama-init:
         condition: service_completed_successfully
