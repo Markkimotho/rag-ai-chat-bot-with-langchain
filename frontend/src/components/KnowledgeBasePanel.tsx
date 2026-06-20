@@ -74,7 +74,7 @@ export function KnowledgeBasePanel({ onClose }: { onClose: () => void }) {
         <input
           ref={fileRef}
           type="file"
-          accept="application/pdf"
+          accept="application/pdf,image/*"
           multiple
           hidden
           onChange={(e) => onFiles(e.target.files)}
@@ -85,7 +85,7 @@ export function KnowledgeBasePanel({ onClose }: { onClose: () => void }) {
           onClick={() => fileRef.current?.click()}
           disabled={busy}
         >
-          Upload PDF
+          Upload PDF or image
         </button>
         <div className={styles.scrapeRow}>
           <input
@@ -133,7 +133,7 @@ export function KnowledgeBasePanel({ onClose }: { onClose: () => void }) {
             {sources.map((s) => (
               <li key={s.source} className={styles.item}>
                 <span className={styles.badge} data-type={s.type}>
-                  {s.type === "web" ? "web" : "pdf"}
+                  {s.type === "web" ? "web" : s.type === "image" ? "img" : "pdf"}
                 </span>
                 <span className={styles.name} title={s.source}>
                   {s.source}

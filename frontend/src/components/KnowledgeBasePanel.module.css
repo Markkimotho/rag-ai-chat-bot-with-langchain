@@ -147,6 +147,10 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
+.badge[data-type="image"] {
+  background: color-mix(in srgb, var(--info) 14%, white);
+  color: color-mix(in srgb, var(--info) 75%, black);
+}
 .name {
   flex: 1;
   min-width: 0;

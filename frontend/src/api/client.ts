@@ -3,6 +3,8 @@
 import type {
   ChatMode,
   CountResponse,
+  Deck,
+  DeckSummary,
   Difficulty,
   Health,
   IngestResponse,
@@ -96,6 +98,41 @@ export const api = {
 
   clearChat: (sessionId: string) =>
     request<{ cleared: boolean }>(`/api/chat/${encodeURIComponent(sessionId)}`, {
+      method: "DELETE",
+    }),
+
+  // ── Flashcards ──────────────────────────────────────────────────────────
+  decks: () => request<{ decks: DeckSummary[] }>("/api/flashcards"),
+  deck: (id: string) => request<Deck>(`/api/flashcards/${id}`),
+  createDeck: (name: string) =>
+    request<Deck>("/api/flashcards", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  generateDeck: (body: {
+    topic: string;
+    n: number;
+    model?: string;
+    deck_name?: string;
+  }) =>
+    request<Deck>("/api/flashcards/generate", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteDeck: (id: string) =>
+    request<{ cleared: boolean }>(`/api/flashcards/${id}`, { method: "DELETE" }),
+  addCard: (deckId: string, front: string, back: string) =>
+    request<Deck>(`/api/flashcards/${deckId}/cards`, {
+      method: "POST",
+      body: JSON.stringify({ front, back }),
+    }),
+  updateCard: (deckId: string, cardId: string, front: string, back: string) =>
+    request<Deck>(`/api/flashcards/${deckId}/cards/${cardId}`, {
+      method: "PUT",
+      body: JSON.stringify({ front, back }),
+    }),
+  deleteCard: (deckId: string, cardId: string) =>
+    request<Deck>(`/api/flashcards/${deckId}/cards/${cardId}`, {
       method: "DELETE",
     }),
 };

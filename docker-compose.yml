@@ -57,8 +57,10 @@ services:
     volumes:
       - ./data/pdfs:/app/data/pdfs
       - chroma_data:/app/data/chroma
+      - flashcards_data:/app/data/flashcards
     restart: unless-stopped
 
 volumes:
   ollama_models:
   chroma_data:
+  flashcards_data:

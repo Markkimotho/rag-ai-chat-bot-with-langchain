@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type SectionId = "quiz" | "agent" | "code" | "chat";
+export type SectionId = "quiz" | "agent" | "code" | "chat" | "cards";
 
 export interface SectionDef {
   id: SectionId;
@@ -59,6 +59,13 @@ const ChatIcon = (
   </svg>
 );
 
+const CardsIcon = (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden>
+    <rect x="3" y="6" width="13" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
+    <path d="M8 3h11a2 2 0 012 2v11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+);
+
 export const SECTIONS: SectionDef[] = [
   {
     id: "quiz",
@@ -87,6 +94,13 @@ export const SECTIONS: SectionDef[] = [
     label: "Regular Chat",
     blurb: "Ask questions grounded in your documents.",
     icon: ChatIcon,
+  },
+  {
+    id: "cards",
+    path: "/flashcards",
+    label: "Flashcards",
+    blurb: "Create, generate, and study flashcards.",
+    icon: CardsIcon,
   },
 ];
 

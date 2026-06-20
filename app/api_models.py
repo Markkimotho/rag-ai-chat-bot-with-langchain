@@ -79,6 +79,7 @@ class CodeChatRequest(BaseModel):
     message: str = Field(min_length=1)
     thread_id: str = "default"
     model: str | None = None
+    use_kb: bool = False  # ground the answer in uploaded documents
 
 
 # ── Study agent ────────────────────────────────────────────────────────────
@@ -117,3 +118,47 @@ class ExplainRequest(BaseModel):
 
 class ExplainResponse(BaseModel):
     explanation: str
+
+
+# ── Flashcards ─────────────────────────────────────────────────────────────
+
+
+class Card(BaseModel):
+    id: str
+    front: str
+    back: str
+    created_at: float = 0
+
+
+class Deck(BaseModel):
+    id: str
+    name: str
+    created_at: float = 0
+    cards: list[Card] = []
+
+
+class DeckSummary(BaseModel):
+    id: str
+    name: str
+    card_count: int
+    created_at: float = 0
+
+
+class DecksResponse(BaseModel):
+    decks: list[DeckSummary]
+
+
+class CreateDeckRequest(BaseModel):
+    name: str = Field(min_length=1)
+
+
+class CardInput(BaseModel):
+    front: str = Field(min_length=1)
+    back: str = Field(min_length=1)
+
+
+class GenerateDeckRequest(BaseModel):
+    topic: str = Field(min_length=1)
+    n: int = Field(default=10, ge=1, le=50)
+    model: str | None = None
+    deck_name: str | None = None

@@ -23,12 +23,13 @@ function renderAt(path: string, props: Partial<Parameters<typeof Sidebar>[0]> = 
 }
 
 describe("Sidebar", () => {
-  it("renders all four sections", () => {
+  it("renders all sections", () => {
     renderAt("/quiz");
     expect(screen.getByText("Quiz Prep")).toBeInTheDocument();
     expect(screen.getByText("Study Agent")).toBeInTheDocument();
     expect(screen.getByText("Programming Assistant")).toBeInTheDocument();
     expect(screen.getByText("Regular Chat")).toBeInTheDocument();
+    expect(screen.getByText("Flashcards")).toBeInTheDocument();
   });
 
   it("marks the active route with aria-current", () => {
@@ -49,7 +50,7 @@ describe("Sidebar", () => {
     renderAt("/quiz", { collapsed: true });
     expect(screen.queryByText("Quiz Prep")).not.toBeInTheDocument();
     // Links remain (icon-only) and accessible via title.
-    expect(screen.getAllByRole("link")).toHaveLength(4);
+    expect(screen.getAllByRole("link")).toHaveLength(5);
   });
 
   it("traps focus and closes on Escape when used as a mobile drawer", async () => {

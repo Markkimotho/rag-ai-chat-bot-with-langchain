@@ -2,7 +2,7 @@
 
 A fully local AI study tool that turns any document or web topic into interactive quizzes. Upload your PDFs, paste a URL, or just name a topic and it scrapes the web — then generates MCQ, True/False, and Short Answer questions, grades your answers with feedback, and explains concepts on demand. Everything runs on your machine via Ollama. No API keys. No cloud costs.
 
-The primary interface is a **React** single-page app with a collapsible navbar and four sections — **Quiz Prep**, **Study Agent**, **Programming Assistant**, and **Regular Chat** — served by a **FastAPI** backend that streams responses token-by-token. The legacy Streamlit UI (which still hosts Multi-Model Analysis and Insights) remains available.
+The primary interface is a **React** single-page app with a collapsible navbar and five sections — **Quiz Prep**, **Study Agent**, **Programming Assistant**, **Regular Chat**, and **Flashcards** — served by a **FastAPI** backend that streams responses token-by-token. Upload PDFs **or images** (OCR'd automatically); your documents are reachable from every chat section. The legacy Streamlit UI (Multi-Model Analysis + Insights) remains available.
 
 Built on React + FastAPI + LangChain + LangGraph + ChromaDB + Ollama.
 
@@ -80,7 +80,7 @@ The legacy Streamlit UI is still runnable with `streamlit run app/ui.py` (port 8
 - [Configuration Reference](#configuration-reference)
 - [Tuning Retrieval Quality](#tuning-retrieval-quality)
 - [Performance](#performance)
-- [Monitoring & Observability](#monitoring--observability)
+- [Monitoring &amp; Observability](#monitoring--observability)
 - [Testing](#testing)
 - [Roadmap](#roadmap)
 
@@ -97,9 +97,17 @@ The legacy Streamlit UI is still runnable with `streamlit run app/ui.py` (port 8
 
 ### Knowledge Base
 
-- Upload PDFs (including scanned/image-based documents via OCR) — ingested directly in the browser
+- Upload **PDFs or images** (PNG/JPG/WebP/TIFF) — scanned PDFs and images are OCR'd automatically via Tesseract
 - Scrape any topic from the web via DuckDuckGo search with Wikipedia fallback — no API key needed
-- Persistent ChromaDB vector store with deterministic deduplication (re-ingest the same file safely)
+- Persistent ChromaDB vector store with deterministic deduplication — re-uploading the same file skips re-embedding (near-instant)
+- Concurrent embedding for fast indexing of large files; a Knowledge base panel lists every indexed file with its chunk count
+- Documents are reachable from every chat section (Regular Chat, Study Agent, and the Programming Assistant via a "Use my documents" toggle)
+
+### Flashcards
+
+- Create decks and cards by hand, or **auto-generate a deck from your uploaded documents** on any topic
+- Animated 3D flip cards with a keyboard-driven study mode (Space to flip, ← Again / → Got it) and a session score
+- Decks persist server-side (mounted volume in Docker)
 
 ### Study Agent
 
@@ -210,7 +218,8 @@ rag-ai-chat-bot-with-langchain/
 │   ├── quiz.py            # Question generation, answer validation, concept explanation
 │   ├── scraper.py         # DuckDuckGo search + BeautifulSoup HTML scraper
 │   ├── quiz_agent.py      # LangGraph ReAct agent with 5 tools (+ streaming)
-│   ├── code_assistant.py  # Programming Assistant — coding chat, no RAG (+ streaming)
+│   ├── code_assistant.py  # Programming Assistant — coding chat (optional KB) (+ streaming)
+│   ├── flashcards.py      # Flashcard deck store + LLM generation from the KB
 │   ├── api_models.py      # Pydantic request/response models (HTTP contract)
 │   ├── api.py             # FastAPI app — JSON + SSE routes, /metrics, serves the SPA
 │   ├── metrics.py         # Prometheus metrics (LLM latency, tokens, KB size, Ollama up)
@@ -256,20 +265,20 @@ rag-ai-chat-bot-with-langchain/
 
 ### Docker path
 
-| Requirement | Notes |
-| --- | --- |
+| Requirement                                                                               | Notes                                                  |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Docker + Compose plugin | v2.2+ for `service_completed_successfully` condition |
 
 That's it. Ollama, Python, and all models are managed inside containers.
 
 ### Local path
 
-| Requirement | Notes |
-| --- | --- |
-| Python 3.11+ | |
-| [Ollama](https://ollama.com/) | Must be running before launching the app |
-| `nomic-embed-text` model | Required for all RAG and quiz operations |
-| Tesseract + Poppler | Optional — only needed for scanned/image PDFs |
+| Requirement                | Notes                                          |
+| -------------------------- | ---------------------------------------------- |
+| Python 3.11+               |                                                |
+| [Ollama](https://ollama.com/) | Must be running before launching the app       |
+| `nomic-embed-text` model | Required for all RAG and quiz operations       |
+| Tesseract + Poppler        | Optional — only needed for scanned/image PDFs |
 
 ---
 
@@ -388,16 +397,17 @@ All variables have sensible defaults. The app works out of the box without editi
 
 The React app (default, [http://localhost:8000](http://localhost:8000)) has a **collapsible left navbar** with four sections and a **top bar** holding the model picker, Ollama status, and a **Knowledge base** button. Each section has its own accent color, so the UI shifts hue as you move between them. The sidebar collapses to an icon rail on desktop and becomes a drawer on mobile.
 
-The **Knowledge base** button opens a panel that lists every indexed file/URL with its chunk count, lets you upload PDFs or scrape a web topic, and shows a clear ✓/✗ acknowledgement when indexing finishes (with a live "indexing…" indicator). All dropdowns (model, quiz options) are custom, theme-matched, keyboard-accessible components — not native browser selects.
+The **Knowledge base** button opens a panel that lists every indexed file/URL with its chunk count, lets you upload **PDFs or images** or scrape a web topic, and shows a clear ✓/✗ acknowledgement when indexing finishes (with a live "indexing…" indicator). All dropdowns are custom, theme-matched, keyboard-accessible components — not native browser selects.
 
-| Section | What it does |
-| --- | --- |
-| **Quiz Prep** | Configure a quiz (topic, type, count, difficulty, exam type), then take it question-by-question with instant grading, explanations, and a final score breakdown. |
-| **Study Agent** | A tool-calling LangGraph tutor that can search the web, build the knowledge base, quiz you, grade answers, and explain — streamed, with tool-use chips. |
-| **Programming Assistant** | A coding chat (no document grounding) with syntax-highlighted, copy-able code blocks. |
-| **Regular Chat** | RAG document Q&A with source citations and a LangChain/LangGraph mode toggle. |
+| Section                   | What it does                                                                                                                                                     |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Quiz Prep**             | Configure a quiz (topic, type, count, difficulty, exam type), then take it question-by-question with instant grading, explanations, and a final score breakdown. |
+| **Study Agent**           | A tool-calling LangGraph tutor that can search the web, build the knowledge base, quiz you, grade answers, and explain — streamed, with tool-use chips.         |
+| **Programming Assistant** | A coding chat with syntax-highlighted, copy-able code blocks. Flip the **"Use my documents"** toggle to ground answers in your uploaded files.                    |
+| **Regular Chat**          | RAG document Q&A with source citations and a LangChain/LangGraph mode toggle.                                                                                    |
+| **Flashcards**            | Create decks and cards by hand or auto-generate from your documents; study with animated flip cards and keyboard controls.                                       |
 
-All chat responses stream token-by-token over SSE. Upload a PDF or scrape a topic from the top bar before using Quiz Prep or Regular Chat.
+All chat responses stream token-by-token over SSE. Upload a PDF/image or scrape a topic from the top bar; your documents are reachable from Regular Chat, Study Agent, the Programming Assistant (toggle), Quiz Prep, and Flashcard generation.
 
 ---
 
@@ -407,17 +417,17 @@ All chat responses stream token-by-token over SSE. Upload a PDF or scrape a topi
 
 The sidebar is the primary way to load content before using any tab.
 
-| Control | What it does |
-| --- | --- |
-| **Ollama status** | Live connection indicator — green dot means Ollama is running |
-| **Chat model** | Select the LLM used for chat, analysis, and insights |
-| **Pull button** | Downloads a model from Ollama if not yet installed |
-| **Mode** | Switch between LangChain and LangGraph orchestration |
-| **Retrieved chunks (Top-K)** | How many document chunks to retrieve per query |
-| **PDFs → Upload & Index** | Upload PDFs — processed through 3-stage pipeline immediately |
-| **Scrape Web** | Type a topic → DuckDuckGo search → scrape + index top pages |
-| **Clear KB** | Delete all vectors from ChromaDB |
-| **Clear Chat** | Reset the current conversation history |
+| Control                            | What it does                                                   |
+| ---------------------------------- | -------------------------------------------------------------- |
+| **Ollama status**            | Live connection indicator — green dot means Ollama is running |
+| **Chat model**               | Select the LLM used for chat, analysis, and insights           |
+| **Pull button**              | Downloads a model from Ollama if not yet installed             |
+| **Mode**                     | Switch between LangChain and LangGraph orchestration           |
+| **Retrieved chunks (Top-K)** | How many document chunks to retrieve per query                 |
+| **PDFs → Upload & Index**   | Upload PDFs — processed through 3-stage pipeline immediately  |
+| **Scrape Web**               | Type a topic → DuckDuckGo search → scrape + index top pages  |
+| **Clear KB**                 | Delete all vectors from ChromaDB                               |
+| **Clear Chat**               | Reset the current conversation history                         |
 
 **Tip:** Load content first before using Quiz Prep or Study Agent. Either upload a PDF or use Scrape Web.
 
@@ -442,14 +452,14 @@ Interactive quiz sessions driven by your knowledge base.
 
 **Setup:**
 
-| Field | Options |
-| --- | --- |
-| Topic | Free text — e.g. "binary search trees", "Python decorators" |
-| Question type | MCQ · True/False · Short Answer · Mixed |
-| Questions | 5 / 10 / 15 / 20 |
-| Difficulty | Easy · Medium · Hard · Mixed |
-| Exam type | General exam · Technical interview · Job interview · Certification · University exam |
-| Generation model | Any installed Ollama model (`qwen2.5:7b` recommended) |
+| Field            | Options                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------- |
+| Topic            | Free text — e.g. "binary search trees", "Python decorators"                             |
+| Question type    | MCQ · True/False · Short Answer · Mixed                                               |
+| Questions        | 5 / 10 / 15 / 20                                                                         |
+| Difficulty       | Easy · Medium · Hard · Mixed                                                          |
+| Exam type        | General exam · Technical interview · Job interview · Certification · University exam |
+| Generation model | Any installed Ollama model (`qwen2.5:7b` recommended)                                  |
 
 Click **Generate Quiz**. If the knowledge base is empty, the sidebar shows a warning — upload a PDF or use **Scrape Web** first.
 
@@ -576,15 +586,15 @@ docker compose down -v
 
 ## Supported Models
 
-| Model | Size | Pull command | Notes |
-| --- | --- | --- | --- |
-| `qwen2.5:7b` | ~4.7 GB | `ollama pull qwen2.5:7b` | **Default** · Best structured JSON output · Recommended for quiz generation |
-| `llama3.1:8b` | ~4.7 GB | `ollama pull llama3.1:8b` | Strong reasoning · Best for Study Agent tool calling |
-| `mistral` | ~4.1 GB | `ollama pull mistral` | Good all-rounder |
-| `gemma2:9b` | ~5.4 GB | `ollama pull gemma2:9b` | Google model · Quality responses · No tool calling |
-| `deepseek-r1:7b` | ~4.7 GB | `ollama pull deepseek-r1:7b` | Strong reasoning (R1 distil) |
-| `llama3.2:3b` | ~2 GB | `ollama pull llama3.2:3b` | Lightweight balance |
-| `llama3.2:1b` | ~700 MB | `ollama pull llama3.2:1b` | Fastest · Lowest memory · No tool calling |
+| Model              | Size    | Pull command                   | Notes                                                                               |
+| ------------------ | ------- | ------------------------------ | ----------------------------------------------------------------------------------- |
+| `qwen2.5:7b`     | ~4.7 GB | `ollama pull qwen2.5:7b`     | **Default** · Best structured JSON output · Recommended for quiz generation |
+| `llama3.1:8b`    | ~4.7 GB | `ollama pull llama3.1:8b`    | Strong reasoning · Best for Study Agent tool calling                               |
+| `mistral`        | ~4.1 GB | `ollama pull mistral`        | Good all-rounder                                                                    |
+| `gemma2:9b`      | ~5.4 GB | `ollama pull gemma2:9b`      | Google model · Quality responses · No tool calling                                |
+| `deepseek-r1:7b` | ~4.7 GB | `ollama pull deepseek-r1:7b` | Strong reasoning (R1 distil)                                                        |
+| `llama3.2:3b`    | ~2 GB   | `ollama pull llama3.2:3b`    | Lightweight balance                                                                 |
+| `llama3.2:1b`    | ~700 MB | `ollama pull llama3.2:1b`    | Fastest · Lowest memory · No tool calling                                         |
 
 The `nomic-embed-text` embedding model (`ollama pull nomic-embed-text`) is required regardless of which chat model you use.
 
@@ -634,13 +644,13 @@ Scraped chunks have `type: "web"` in metadata and display the source URL in the 
 
 `app/quiz_agent.py` implements a LangGraph `create_react_agent` with five tools:
 
-| Tool | What it does |
-| --- | --- |
-| `search_and_add_to_kb` | DuckDuckGo search → scrape → ingest into ChromaDB |
-| `make_quiz` | Generate N questions on a topic from the knowledge base |
-| `check_answer` | Grade a student answer with score, feedback, and hints |
-| `explain` | Detailed concept explanation from the knowledge base |
-| `list_topics` | Summarise what's in the current knowledge base |
+| Tool                     | What it does                                            |
+| ------------------------ | ------------------------------------------------------- |
+| `search_and_add_to_kb` | DuckDuckGo search → scrape → ingest into ChromaDB     |
+| `make_quiz`            | Generate N questions on a topic from the knowledge base |
+| `check_answer`         | Grade a student answer with score, feedback, and hints  |
+| `explain`              | Detailed concept explanation from the knowledge base    |
+| `list_topics`          | Summarise what's in the current knowledge base          |
 
 A module-level `MemorySaver` checkpointer keeps conversation history across Streamlit reruns for the lifetime of the process. Each "New Session" click assigns a new `thread_id`, effectively starting a fresh conversation.
 
@@ -680,20 +690,23 @@ Both modes use the same prompts from `app/prompts.py` and return:
 
 All settings are managed by `pydantic-settings` in `app/config.py`. Override any value in `.env` or as an environment variable.
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
-| `OLLAMA_MODEL` | `qwen2.5:7b` | Default LLM for chat, quiz, and analysis |
-| `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text` | Embedding model (required) |
-| `OLLAMA_KEEP_ALIVE` | `30m` | How long Ollama keeps the model resident after a call. Higher = no cold-load latency between requests. `-1` keeps it loaded indefinitely. |
-| `CHROMA_PERSIST_DIR` | `data/chroma` | ChromaDB persistent storage directory |
-| `CHROMA_COLLECTION_NAME` | `rag-chatbot` | ChromaDB collection name |
-| `CHUNK_SIZE` | `1000` | Max characters per text chunk |
-| `CHUNK_OVERLAP` | `200` | Character overlap between chunks |
-| `TOP_K` | `5` | Documents retrieved per query |
-| `MEMORY_WINDOW` | `10` | Conversation turns (Q+A pairs) kept in memory |
-| `QUIZ_DEFAULT_N` | `10` | Default number of quiz questions |
-| `QUIZ_TOP_K` | `8` | Chunks retrieved for question generation |
+| Variable                   | Default                    | Description                                                                                                                                |
+| -------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OLLAMA_BASE_URL`        | `http://localhost:11434` | Ollama server URL                                                                                                                          |
+| `OLLAMA_MODEL`           | `qwen2.5:7b`             | Default LLM for chat, quiz, and analysis                                                                                                   |
+| `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text`       | Embedding model (required)                                                                                                                 |
+| `OLLAMA_KEEP_ALIVE`      | `30m`                    | How long Ollama keeps the model resident after a call. Higher = no cold-load latency between requests.`-1` keeps it loaded indefinitely. |
+| `CHROMA_PERSIST_DIR`     | `data/chroma`            | ChromaDB persistent storage directory                                                                                                      |
+| `CHROMA_COLLECTION_NAME` | `rag-chatbot`            | ChromaDB collection name                                                                                                                   |
+| `CHUNK_SIZE`             | `1000`                   | Max characters per text chunk                                                                                                              |
+| `CHUNK_OVERLAP`          | `200`                    | Character overlap between chunks                                                                                                           |
+| `TOP_K`                  | `5`                      | Documents retrieved per query                                                                                                              |
+| `MEMORY_WINDOW`          | `10`                     | Conversation turns (Q+A pairs) kept in memory                                                                                              |
+| `QUIZ_DEFAULT_N`         | `10`                     | Default number of quiz questions                                                                                                           |
+| `QUIZ_TOP_K`             | `8`                      | Chunks retrieved for question generation                                                                                                   |
+| `INGEST_BATCH_SIZE`      | `256`                    | Chunks per embedding batch during indexing                                                                                                 |
+| `INGEST_WORKERS`         | `4`                      | Embedding batches embedded concurrently (faster large-file indexing)                                                                       |
+| `FLASHCARDS_DIR`         | `data/flashcards`        | Where flashcard decks are persisted                                                                                                        |
 
 After changing `CHUNK_SIZE` or `CHUNK_OVERLAP`, re-ingest documents for the change to take effect. All other settings apply on the next request.
 
@@ -701,13 +714,13 @@ After changing `CHUNK_SIZE` or `CHUNK_OVERLAP`, re-ingest documents for the chan
 
 ## Tuning Retrieval Quality
 
-| Parameter | Effect |
-| --- | --- |
-| `TOP_K` | Higher = more context but more tokens. Start at 5, increase if answers are incomplete. |
-| `CHUNK_SIZE` | Larger chunks give more context per result; smaller chunks give more precise matches. |
-| `CHUNK_OVERLAP` | Increase if answers are being cut off at chunk boundaries. |
-| `QUIZ_TOP_K` | Higher = more source material for question generation. Increase if questions are too narrow. |
-| Model choice | Larger models (`llama3.1:8b`, `qwen2.5:7b`) produce better questions and answers than smaller ones. |
+| Parameter         | Effect                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------- |
+| `TOP_K`         | Higher = more context but more tokens. Start at 5, increase if answers are incomplete.                  |
+| `CHUNK_SIZE`    | Larger chunks give more context per result; smaller chunks give more precise matches.                   |
+| `CHUNK_OVERLAP` | Increase if answers are being cut off at chunk boundaries.                                              |
+| `QUIZ_TOP_K`    | Higher = more source material for question generation. Increase if questions are too narrow.            |
+| Model choice      | Larger models (`llama3.1:8b`, `qwen2.5:7b`) produce better questions and answers than smaller ones. |
 
 ---
 
@@ -717,6 +730,8 @@ First-token latency is dominated by the local model. Two levers:
 
 - **Keep the model warm.** `OLLAMA_KEEP_ALIVE` (default `30m`) keeps the model resident between requests, so you only pay the multi-second cold load once. Set `-1` to never unload. This is applied to every LLM call.
 - **Pick a model that fits your hardware.** `qwen2.5:7b` is the quality default; on slower machines switch to `llama3.2:3b` (≈2 GB) or `llama3.2:1b` from the model picker for noticeably faster responses at lower quality.
+
+- **Indexing large files is concurrent and deduplicated.** Embeddings (the bottleneck) are computed in parallel batches (`INGEST_WORKERS` × `INGEST_BATCH_SIZE`), and chunks whose deterministic id is already indexed are skipped — re-uploading the same file is near-instant instead of re-embedding every page.
 
 All chat surfaces stream token-by-token, so the first token appears as soon as the model starts generating rather than after the full answer. Quiz generation is a single non-streaming call (it returns N structured questions at once) and is the slowest operation — use a smaller model or fewer questions if it drags. Watch the actual numbers on the latency panels in Grafana (below).
 
@@ -731,12 +746,12 @@ The backend exposes Prometheus metrics at **`GET /metrics`**. A ready-made stack
 docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up --build
 ```
 
-| Service | URL | Purpose |
-| --- | --- | --- |
-| Grafana | [http://localhost:3000](http://localhost:3000) (admin / admin) | Dashboards + log explorer |
-| Prometheus | [http://localhost:9090](http://localhost:9090) | Metrics store, scrapes `web:8000/metrics` |
-| Loki | `http://localhost:3100` | Log store (queried via Grafana) |
-| `/metrics` | [http://localhost:8000/metrics](http://localhost:8000/metrics) | Raw Prometheus exposition |
+| Service      | URL                                                         | Purpose                                     |
+| ------------ | ----------------------------------------------------------- | ------------------------------------------- |
+| Grafana      | [http://localhost:3000](http://localhost:3000) (admin / admin) | Dashboards + log explorer                   |
+| Prometheus   | [http://localhost:9090](http://localhost:9090)                 | Metrics store, scrapes `web:8000/metrics` |
+| Loki         | `http://localhost:3100`                                   | Log store (queried via Grafana)             |
+| `/metrics` | [http://localhost:8000/metrics](http://localhost:8000/metrics) | Raw Prometheus exposition                   |
 
 Grafana opens with the **"Prep Pal AI — Overview"** dashboard already provisioned (datasources + panels), showing:
 
@@ -747,13 +762,13 @@ Grafana opens with the **"Prep Pal AI — Overview"** dashboard already provisio
 
 ### Custom metrics
 
-| Metric | Type | Labels | Meaning |
-| --- | --- | --- | --- |
-| `preppal_llm_request_duration_seconds` | histogram | `surface` | End-to-end LLM request duration |
-| `preppal_llm_requests_total` | counter | `surface`, `status` | LLM requests by outcome |
-| `preppal_stream_tokens_total` | counter | `surface` | Tokens streamed to clients |
-| `preppal_ollama_up` | gauge | — | Ollama reachable (1/0) |
-| `preppal_kb_chunks` | gauge | — | Chunks indexed in the knowledge base |
+| Metric                                   | Type      | Labels                  | Meaning                              |
+| ---------------------------------------- | --------- | ----------------------- | ------------------------------------ |
+| `preppal_llm_request_duration_seconds` | histogram | `surface`             | End-to-end LLM request duration      |
+| `preppal_llm_requests_total`           | counter   | `surface`, `status` | LLM requests by outcome              |
+| `preppal_stream_tokens_total`          | counter   | `surface`             | Tokens streamed to clients           |
+| `preppal_ollama_up`                    | gauge     | —                      | Ollama reachable (1/0)               |
+| `preppal_kb_chunks`                    | gauge     | —                      | Chunks indexed in the knowledge base |
 
 Default per-route HTTP metrics (`http_requests_total`, `http_request_duration_seconds`) come from `prometheus-fastapi-instrumentator`.
 
@@ -789,41 +804,41 @@ pytest evals/ -m eval -v
 
 ### Backend gate tests (`tests/`)
 
-| Test file | What is covered |
-| --- | --- |
-| `test_ingestion.py` | Chunk ID determinism, PDF loading + metadata, empty directory |
-| `test_retriever.py` | Default and custom top-K configuration |
-| `test_chain.py` | LCEL chain invoke, source extraction, empty context |
-| `test_graph.py` | Node-level: contextualize (with/without history), retrieve, generate |
-| `test_quiz.py` | JSON extraction, MCQ/TF deterministic grading, short-answer LLM grading, generation, error handling |
-| `test_scraper.py` | HTML extraction, script/nav stripping, URL scraping, HTTP errors, DDG search, Wikipedia fallback |
-| `test_quiz_agent.py` | All 5 tool wrappers, empty KB, errors, n-clamping, delegation |
-| `test_api.py` | FastAPI routes, validation errors, KB upload/scrape, SSE event framing + ordering (mocked engine) |
-| `test_code_assistant.py` | Coding system prompt, per-thread memory, thread isolation, streaming, error handling |
+| Test file                  | What is covered                                                                                     |
+| -------------------------- | --------------------------------------------------------------------------------------------------- |
+| `test_ingestion.py`      | Chunk ID determinism, PDF loading + metadata, empty directory                                       |
+| `test_retriever.py`      | Default and custom top-K configuration                                                              |
+| `test_chain.py`          | LCEL chain invoke, source extraction, empty context                                                 |
+| `test_graph.py`          | Node-level: contextualize (with/without history), retrieve, generate                                |
+| `test_quiz.py`           | JSON extraction, MCQ/TF deterministic grading, short-answer LLM grading, generation, error handling |
+| `test_scraper.py`        | HTML extraction, script/nav stripping, URL scraping, HTTP errors, DDG search, Wikipedia fallback    |
+| `test_quiz_agent.py`     | All 5 tool wrappers, empty KB, errors, n-clamping, delegation                                       |
+| `test_api.py`            | FastAPI routes, validation errors, KB upload/scrape, SSE event framing + ordering (mocked engine)   |
+| `test_code_assistant.py` | Coding system prompt, per-thread memory, thread isolation, streaming, error handling                |
 
 ### Frontend gate tests (`frontend/src/__tests__/`)
 
-| Test file | What is covered |
-| --- | --- |
-| `stream.test.ts` | SSE frame parsing, partial-frame buffering, streaming POST event order, error path |
-| `client.test.ts` | Typed fetch wrapper: JSON serialization, multipart upload, `ApiError` mapping |
-| `quizReducer.test.ts` | Quiz state machine transitions (setup → question → feedback → results), scoring |
-| `useStreamingChat.test.tsx` | Token accumulation, sources attach, error flag, ignore-while-streaming |
-| `Sidebar.test.tsx` | Sections render, `aria-current` active item, collapse callback, rail labels, mobile-drawer Esc |
-| `ChatPanel.test.tsx` | Empty state, message render, submit/Enter send + clear, Stop while streaming |
+| Test file                     | What is covered                                                                                 |
+| ----------------------------- | ----------------------------------------------------------------------------------------------- |
+| `stream.test.ts`            | SSE frame parsing, partial-frame buffering, streaming POST event order, error path              |
+| `client.test.ts`            | Typed fetch wrapper: JSON serialization, multipart upload,`ApiError` mapping                  |
+| `quizReducer.test.ts`       | Quiz state machine transitions (setup → question → feedback → results), scoring              |
+| `useStreamingChat.test.tsx` | Token accumulation, sources attach, error flag, ignore-while-streaming                          |
+| `Sidebar.test.tsx`          | Sections render,`aria-current` active item, collapse callback, rail labels, mobile-drawer Esc |
+| `ChatPanel.test.tsx`        | Empty state, message render, submit/Enter send + clear, Stop while streaming                    |
 
 ### Evals (`evals/`)
 
-| Eval file | Threshold |
-| --- | --- |
-| `test_quiz_eval.py` | ≥60% of generated MCQs are well-formed; a known-correct answer grades 100 |
+| Eval file                       | Threshold                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------ |
+| `test_quiz_eval.py`           | ≥60% of generated MCQs are well-formed; a known-correct answer grades 100           |
 | `test_code_assistant_eval.py` | Response is non-empty, contains a fenced code block, and retains conversation memory |
 
 ---
 
 ## Roadmap
 
-- [x] Streaming responses (token-by-token output) — shipped via SSE
+- [ ] Streaming responses (token-by-token output) — shipped via SSE
 - [ ] Spaced repetition — resurface questions you answered wrong on a schedule
 - [ ] Question bank export (JSON / CSV / Anki format)
 - [ ] Support for DOCX, TXT, HTML, EPUB ingestion

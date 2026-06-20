@@ -80,6 +80,9 @@
 .item.active[data-section="chat"] {
   --accent: var(--accent-chat);
 }
+.item.active[data-section="cards"] {
+  --accent: var(--accent-cards);
+}
 .item.active {
   background: var(--accent-soft);
   color: var(--accent);

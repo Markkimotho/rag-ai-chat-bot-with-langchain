@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     quiz_default_n: int = 10
     quiz_top_k: int = 8
 
+    # Ingestion throughput — embeddings are the bottleneck for large files.
+    # Chunks per embedding batch, and how many batches to embed concurrently.
+    ingest_batch_size: int = 256
+    ingest_workers: int = 4
+
+    # Flashcards persisted store (mount a volume here in Docker to keep decks).
+    flashcards_dir: str = "data/flashcards"
+
 
 @lru_cache
 def get_settings() -> Settings:

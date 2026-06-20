@@ -137,6 +137,58 @@ def load_and_chunk_pdf(
     return chunks
 
 
+IMAGE_EXTENSIONS = frozenset(
+    {".png", ".jpg", ".jpeg", ".webp", ".tiff", ".tif", ".bmp", ".gif"}
+)
+
+
+def load_and_chunk_image(
+    image_path: str | Path, source_name: str | None = None
+) -> list[Document]:
+    """OCR an image file (PNG/JPG/…) with Tesseract and chunk the extracted text.
+
+    Returns [] when no readable text is found or OCR deps are missing.
+    """
+    settings = get_settings()
+    image_path = Path(image_path)
+    source_name = source_name or image_path.name
+
+    try:
+        import pytesseract
+        from PIL import Image
+    except ImportError:
+        logger.warning(
+            "Image OCR needs Pillow + pytesseract + the tesseract binary. "
+            "Run: brew install tesseract && pip install pillow pytesseract"
+        )
+        return []
+
+    try:
+        with Image.open(image_path) as img:
+            text = pytesseract.image_to_string(img, config="--psm 3")
+    except Exception as exc:
+        logger.warning("OCR failed for image %s: %s", source_name, exc)
+        return []
+
+    if not text or len(text.strip()) < 10:
+        logger.warning("No readable text found in image %s", source_name)
+        return []
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=settings.chunk_size,
+        chunk_overlap=settings.chunk_overlap,
+        length_function=len,
+    )
+    chunks = splitter.create_documents(
+        [text], metadatas=[{"source": source_name, "page": 0, "type": "image"}]
+    )
+    for i, chunk in enumerate(chunks):
+        chunk.metadata["chunk_index"] = i
+        chunk.metadata["id"] = _chunk_id(source_name, 0, i)
+    logger.info("OCR'd image %s → %d chunk(s)", source_name, len(chunks))
+    return chunks
+
+
 def load_and_chunk_pdfs(pdf_dir: str | Path) -> list[Document]:
     pdf_dir = Path(pdf_dir)
     all_chunks: list[Document] = []

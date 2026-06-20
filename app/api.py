@@ -28,18 +28,24 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import chain as lcel_chain
 from app import code_assistant
+from app import flashcards as fc
 from app import graph as langgraph_module
 from app import metrics
 from app import quiz_agent
 from app.analysis import get_chat_models, get_installed_models, pull_model
 from app.api_models import (
     AgentRequest,
+    CardInput,
     ChatRequest,
     ClearResponse,
     CodeChatRequest,
     CountResponse,
+    CreateDeckRequest,
+    Deck,
+    DecksResponse,
     ExplainRequest,
     ExplainResponse,
+    GenerateDeckRequest,
     HealthResponse,
     IngestResponse,
     ModelsResponse,
@@ -51,7 +57,7 @@ from app.api_models import (
     SourcesResponse,
 )
 from app.config import get_settings
-from app.ingestion import load_and_chunk_pdf
+from app.ingestion import IMAGE_EXTENSIONS, load_and_chunk_image, load_and_chunk_pdf
 from app.memory import clear_history
 from app.quiz import explain_concept, generate_questions, validate_answer
 from app.scraper import search_and_scrape
@@ -187,22 +193,32 @@ async def kb_upload(files: list[UploadFile] = File(...)) -> IngestResponse:
     total = 0
     details: list[str] = []
     for f in files:
-        if not (f.filename or "").lower().endswith(".pdf"):
-            details.append(f"{f.filename}: skipped (not a PDF)")
+        name = f.filename or "file"
+        ext = Path(name).suffix.lower()
+        is_pdf = ext == ".pdf"
+        is_image = ext in IMAGE_EXTENSIONS
+        if not (is_pdf or is_image):
+            details.append(f"{name}: skipped (unsupported type)")
             continue
         data = await f.read()
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
             tmp.write(data)
             tmp_path = Path(tmp.name)
         try:
             # Preserve the original filename as the KB source label.
-            chunks = load_and_chunk_pdf(tmp_path, source_name=f.filename)
+            if is_pdf:
+                chunks = load_and_chunk_pdf(tmp_path, source_name=name)
+            else:
+                chunks = load_and_chunk_image(tmp_path, source_name=name)
+            if not chunks:
+                details.append(f"{name}: no readable text found")
+                continue
             n = ingest_documents(chunks)
             total += n
-            details.append(f"{f.filename}: {n} chunks")
+            details.append(f"{name}: {n} chunks")
         except Exception as exc:  # noqa: BLE001
-            logger.exception("Upload failed for %s", f.filename)
-            details.append(f"{f.filename}: failed — {exc}")
+            logger.exception("Upload failed for %s", name)
+            details.append(f"{name}: failed — {exc}")
         finally:
             tmp_path.unlink(missing_ok=True)
     _set_kb_gauge()
@@ -264,7 +280,10 @@ def chat_clear(session_id: str) -> ClearResponse:
 @app.post("/api/code-chat/stream")
 def code_chat_stream(req: CodeChatRequest) -> StreamingResponse:
     events = code_assistant.stream_code_assistant(
-        message=req.message, thread_id=req.thread_id, model=req.model
+        message=req.message,
+        thread_id=req.thread_id,
+        model=req.model,
+        use_kb=req.use_kb,
     )
     return _sse(events, surface="code")
 
@@ -319,6 +338,69 @@ def quiz_validate(req: QuizValidateRequest) -> dict:
 @app.post("/api/quiz/explain", response_model=ExplainResponse)
 def quiz_explain(req: ExplainRequest) -> ExplainResponse:
     return ExplainResponse(explanation=explain_concept(req.concept, model=req.model))
+
+
+# ── Flashcards ─────────────────────────────────────────────────────────────
+
+
+@app.get("/api/flashcards", response_model=DecksResponse)
+def flashcards_list() -> DecksResponse:
+    return DecksResponse(decks=fc.list_decks())
+
+
+@app.post("/api/flashcards", response_model=Deck)
+def flashcards_create(req: CreateDeckRequest) -> Deck:
+    return Deck(**fc.create_deck(req.name))
+
+
+@app.post("/api/flashcards/generate", response_model=Deck)
+def flashcards_generate(req: GenerateDeckRequest) -> Deck:
+    start = time.perf_counter()
+    status = "success"
+    try:
+        return Deck(**fc.generate_deck(req.topic, n=req.n, model=req.model, deck_name=req.deck_name))
+    except Exception:
+        status = "error"
+        raise
+    finally:
+        metrics.LLM_LATENCY.labels("flashcards").observe(time.perf_counter() - start)
+        metrics.LLM_REQUESTS.labels("flashcards", status).inc()
+
+
+@app.get("/api/flashcards/{deck_id}", response_model=Deck)
+def flashcards_get(deck_id: str) -> Deck:
+    deck = fc.get_deck(deck_id)
+    if not deck:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return Deck(**deck)
+
+
+@app.delete("/api/flashcards/{deck_id}", response_model=ClearResponse)
+def flashcards_delete(deck_id: str) -> ClearResponse:
+    if not fc.delete_deck(deck_id):
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return ClearResponse(cleared=True)
+
+
+@app.post("/api/flashcards/{deck_id}/cards", response_model=Deck)
+def flashcards_add_card(deck_id: str, req: CardInput) -> Deck:
+    if fc.add_card(deck_id, req.front, req.back) is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return Deck(**fc.get_deck(deck_id))
+
+
+@app.put("/api/flashcards/{deck_id}/cards/{card_id}", response_model=Deck)
+def flashcards_update_card(deck_id: str, card_id: str, req: CardInput) -> Deck:
+    if fc.update_card(deck_id, card_id, req.front, req.back) is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+    return Deck(**fc.get_deck(deck_id))
+
+
+@app.delete("/api/flashcards/{deck_id}/cards/{card_id}", response_model=Deck)
+def flashcards_delete_card(deck_id: str, card_id: str) -> Deck:
+    if not fc.delete_card(deck_id, card_id):
+        raise HTTPException(status_code=404, detail="Card not found")
+    return Deck(**fc.get_deck(deck_id))
 
 
 # ── Static SPA (production) ─────────────────────────────────────────────────

@@ -71,6 +71,27 @@ export type StreamEvent =
   | { type: "error"; message: string }
   | { type: "done" };
 
+export interface Flashcard {
+  id: string;
+  front: string;
+  back: string;
+  created_at: number;
+}
+
+export interface Deck {
+  id: string;
+  name: string;
+  created_at: number;
+  cards: Flashcard[];
+}
+
+export interface DeckSummary {
+  id: string;
+  name: string;
+  card_count: number;
+  created_at: number;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;

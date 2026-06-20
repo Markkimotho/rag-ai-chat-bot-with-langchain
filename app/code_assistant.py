@@ -17,6 +17,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, MessagesState, StateGraph
 
 from app.config import get_settings
+from app.retriever import get_retriever
 
 logger = logging.getLogger(__name__)
 
@@ -54,18 +55,54 @@ def _get_llm(model: str | None = None) -> ChatOllama:
     )
 
 
+def _retrieve_context(query: str, top_k: int | None = None) -> str:
+    """Pull relevant chunks from the knowledge base for grounding (best-effort)."""
+    try:
+        docs = get_retriever(top_k=top_k).invoke(query)
+    except Exception:
+        logger.exception("KB retrieval failed in code assistant")
+        return ""
+    if not docs:
+        return ""
+    return "\n\n---\n\n".join(
+        f"[{d.metadata.get('source', 'doc')}] {d.page_content}" for d in docs
+    )
+
+
 def _build_graph():
     """A minimal single-node chat graph with persistent message history.
 
     The system prompt is prepended on every call; the checkpointer stores the
-    running human/assistant turns per thread_id.
+    running human/assistant turns per thread_id. When `use_kb` is set, relevant
+    chunks from the uploaded documents are injected as an ephemeral context
+    message (not persisted to memory).
     """
     builder = StateGraph(MessagesState)
 
     def call_model(state: MessagesState, config) -> dict:
-        model = config.get("configurable", {}).get("model")
-        llm = _get_llm(model)
-        messages = [SystemMessage(content=SYSTEM_PROMPT), *state["messages"]]
+        cfg = config.get("configurable", {})
+        llm = _get_llm(cfg.get("model"))
+        messages = [SystemMessage(content=SYSTEM_PROMPT)]
+
+        if cfg.get("use_kb"):
+            last_human = next(
+                (m for m in reversed(state["messages"]) if m.type == "human"), None
+            )
+            if last_human:
+                context = _retrieve_context(last_human.content, cfg.get("top_k"))
+                if context:
+                    messages.append(
+                        SystemMessage(
+                            content=(
+                                "Relevant excerpts from the user's uploaded documents:\n\n"
+                                f"{context}\n\n"
+                                "Use these when they help answer the question. If they "
+                                "are not relevant, answer from your own knowledge."
+                            )
+                        )
+                    )
+
+        messages.extend(state["messages"])
         response = llm.invoke(messages)
         return {"messages": [response]}
 
@@ -85,13 +122,14 @@ def invoke_code_assistant(
     message: str,
     thread_id: str = "default",
     model: str | None = None,
+    use_kb: bool = False,
 ) -> str:
     """Return the assistant's full response for one message (non-streaming)."""
     graph = get_graph()
     try:
         result = graph.invoke(
             {"messages": [HumanMessage(content=message)]},
-            config={"configurable": {"thread_id": thread_id, "model": model}},
+            config={"configurable": {"thread_id": thread_id, "model": model, "use_kb": use_kb}},
         )
         messages = result.get("messages", [])
         return messages[-1].content if messages else "No response."
@@ -104,17 +142,19 @@ def stream_code_assistant(
     message: str,
     thread_id: str = "default",
     model: str | None = None,
+    use_kb: bool = False,
 ) -> Iterator[tuple[str, object]]:
     """Stream the assistant's response token-by-token.
 
     Yields ("token", str) for each delta. Errors surface as ("error", str).
-    Conversation memory is persisted by the graph checkpointer.
+    Conversation memory is persisted by the graph checkpointer. When `use_kb`
+    is set, responses are grounded in the uploaded documents.
     """
     graph = get_graph()
     try:
         for msg_chunk, _metadata in graph.stream(
             {"messages": [HumanMessage(content=message)]},
-            config={"configurable": {"thread_id": thread_id, "model": model}},
+            config={"configurable": {"thread_id": thread_id, "model": model, "use_kb": use_kb}},
             stream_mode="messages",
         ):
             token = getattr(msg_chunk, "content", "")

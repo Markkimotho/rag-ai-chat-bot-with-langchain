@@ -109,11 +109,21 @@ def test_kb_upload_pdf():
     assert mock_load.call_args.kwargs["source_name"] == "notes.pdf"
 
 
-def test_kb_upload_skips_non_pdf():
+def test_kb_upload_skips_unsupported_type():
     files = {"files": ("notes.txt", b"hello", "text/plain")}
     body = client.post("/api/kb/upload", files=files).json()
     assert body["chunks_added"] == 0
     assert "skipped" in body["detail"]
+
+
+def test_kb_upload_image_routes_to_ocr():
+    with patch("app.api.load_and_chunk_image", return_value=["a", "b"]) as mock_img, patch(
+        "app.api.ingest_documents", return_value=2
+    ):
+        files = {"files": ("scan.png", b"\x89PNG fake", "image/png")}
+        body = client.post("/api/kb/upload", files=files).json()
+    assert body["chunks_added"] == 2
+    assert mock_img.call_args.kwargs["source_name"] == "scan.png"
 
 
 def test_kb_clear():
@@ -193,6 +203,21 @@ def test_code_chat_stream():
     assert frames[-1] == {"type": "done"}
 
 
+def test_code_chat_passes_use_kb():
+    captured = {}
+
+    def fake(**kwargs):
+        captured.update(kwargs)
+        yield ("token", "ok")
+
+    with patch("app.api.code_assistant.stream_code_assistant", side_effect=fake):
+        client.post(
+            "/api/code-chat/stream",
+            json={"message": "explain my code", "use_kb": True},
+        )
+    assert captured["use_kb"] is True
+
+
 def test_agent_stream_with_tool_event():
     def fake(**kwargs):
         yield ("tool", "make_quiz")
@@ -263,6 +288,75 @@ def test_quiz_explain():
             "/api/quiz/explain", json={"concept": "recursion"}
         ).json()
     assert body["explanation"].startswith("Recursion")
+
+
+# ── Flashcards ──────────────────────────────────────────────────────────────
+
+_DECK = {
+    "id": "d1",
+    "name": "Algorithms",
+    "created_at": 1.0,
+    "cards": [{"id": "c1", "front": "Q", "back": "A", "created_at": 1.0}],
+}
+
+
+def test_flashcards_list():
+    summary = {"id": "d1", "name": "Algorithms", "card_count": 1, "created_at": 1.0}
+    with patch("app.api.fc.list_decks", return_value=[summary]):
+        body = client.get("/api/flashcards").json()
+    assert body["decks"][0]["name"] == "Algorithms"
+
+
+def test_flashcards_create():
+    with patch("app.api.fc.create_deck", return_value=_DECK):
+        body = client.post("/api/flashcards", json={"name": "Algorithms"}).json()
+    assert body["id"] == "d1"
+    assert body["cards"][0]["front"] == "Q"
+
+
+def test_flashcards_get_404():
+    with patch("app.api.fc.get_deck", return_value=None):
+        assert client.get("/api/flashcards/missing").status_code == 404
+
+
+def test_flashcards_generate():
+    with patch("app.api.fc.generate_deck", return_value=_DECK) as m:
+        body = client.post(
+            "/api/flashcards/generate", json={"topic": "trees", "n": 5}
+        ).json()
+    assert body["name"] == "Algorithms"
+    assert m.call_args.args[0] == "trees"
+    assert m.call_args.kwargs["n"] == 5
+
+
+def test_flashcards_add_card():
+    with patch("app.api.fc.add_card", return_value={"id": "c2"}), patch(
+        "app.api.fc.get_deck", return_value=_DECK
+    ):
+        r = client.post(
+            "/api/flashcards/d1/cards", json={"front": "Q2", "back": "A2"}
+        )
+    assert r.status_code == 200
+
+
+def test_flashcards_add_card_deck_404():
+    with patch("app.api.fc.add_card", return_value=None):
+        r = client.post(
+            "/api/flashcards/missing/cards", json={"front": "Q", "back": "A"}
+        )
+    assert r.status_code == 404
+
+
+def test_flashcards_delete_card():
+    with patch("app.api.fc.delete_card", return_value=True), patch(
+        "app.api.fc.get_deck", return_value=_DECK
+    ):
+        assert client.delete("/api/flashcards/d1/cards/c1").status_code == 200
+
+
+def test_flashcards_delete_deck():
+    with patch("app.api.fc.delete_deck", return_value=True):
+        assert client.delete("/api/flashcards/d1").json() == {"cleared": True}
 
 
 # ── Metrics ──────────────────────────────────────────────────────────────────

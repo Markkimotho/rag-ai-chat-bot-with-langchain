@@ -1,6 +1,8 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { ChatPanel } from "../components/ChatPanel";
 import { EmptyState } from "../components/EmptyState";
+import { Toggle } from "../components/Toggle";
+import { useKnowledgeBase } from "../context/KnowledgeBaseContext";
 import { useModelContext } from "../context/ModelContext";
 import { useStreamingChat } from "../hooks/useStreamingChat";
 import styles from "./Section.module.css";
@@ -14,8 +16,10 @@ const EXAMPLES = [
 
 export function ProgrammingAssistant() {
   const { selected } = useModelContext();
+  const { count } = useKnowledgeBase();
   const { messages, streaming, send, cancel } = useStreamingChat();
   const threadId = useRef(`code-${crypto.randomUUID()}`);
+  const [useKb, setUseKb] = useState(false);
 
   const onSend = (text: string) =>
     send(text, {
@@ -25,6 +29,7 @@ export function ProgrammingAssistant() {
         message,
         thread_id: threadId.current,
         model: selected || undefined,
+        use_kb: useKb,
       }),
     });
 
@@ -33,9 +38,20 @@ export function ProgrammingAssistant() {
       <ChatPanel
         messages={messages}
         streaming={streaming}
-        placeholder="Ask anything about code…"
+        placeholder={
+          useKb ? "Ask about your code/docs…" : "Ask anything about code…"
+        }
         onSend={onSend}
         onStop={cancel}
+        toolbar={
+          <Toggle
+            checked={useKb}
+            onChange={setUseKb}
+            label="Use my documents"
+            hint={count > 0 ? `${count} chunks` : "knowledge base empty"}
+            disabled={count === 0}
+          />
+        }
         empty={
           <EmptyState
             title="Programming Assistant"
