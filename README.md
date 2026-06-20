@@ -1,4 +1,4 @@
-# Exam Prep AI — RAG · Quiz · Web Scraping · Tool Calling
+# Prep Pal AI — RAG · Quiz · Web Scraping · Tool Calling · Observability
 
 A fully local AI study tool that turns any document or web topic into interactive quizzes. Upload your PDFs, paste a URL, or just name a topic and it scrapes the web — then generates MCQ, True/False, and Short Answer questions, grades your answers with feedback, and explains concepts on demand. Everything runs on your machine via Ollama. No API keys. No cloud costs.
 
@@ -79,6 +79,8 @@ The legacy Streamlit UI is still runnable with `streamlit run app/ui.py` (port 8
 - [Orchestration Modes](#orchestration-modes)
 - [Configuration Reference](#configuration-reference)
 - [Tuning Retrieval Quality](#tuning-retrieval-quality)
+- [Performance](#performance)
+- [Monitoring & Observability](#monitoring--observability)
 - [Testing](#testing)
 - [Roadmap](#roadmap)
 
@@ -210,7 +212,8 @@ rag-ai-chat-bot-with-langchain/
 │   ├── quiz_agent.py      # LangGraph ReAct agent with 5 tools (+ streaming)
 │   ├── code_assistant.py  # Programming Assistant — coding chat, no RAG (+ streaming)
 │   ├── api_models.py      # Pydantic request/response models (HTTP contract)
-│   ├── api.py             # FastAPI app — JSON + SSE routes, serves the React SPA
+│   ├── api.py             # FastAPI app — JSON + SSE routes, /metrics, serves the SPA
+│   ├── metrics.py         # Prometheus metrics (LLM latency, tokens, KB size, Ollama up)
 │   └── ui.py              # Legacy Streamlit UI (Analysis + Insights live here)
 ├── frontend/              # React + Vite + TypeScript SPA
 │   ├── src/
@@ -238,8 +241,13 @@ rag-ai-chat-bot-with-langchain/
 ├── data/                  # pdfs/ (CLI ingestion) + chroma/ storage (gitignored)
 ├── requirements.txt
 ├── Dockerfile             # Multi-stage: builds SPA, serves it via FastAPI
+├── monitoring/            # Observability stack (opt-in)
+│   ├── prometheus.yml     # scrapes web:8000/metrics
+│   ├── loki-config.yml    promtail-config.yml
+│   └── grafana/           # provisioned datasources + overview dashboard
 ├── Dockerfile.streamlit   # Legacy Streamlit image
-└── docker-compose.yml     # ollama + ollama-init + web (FastAPI :8000)
+├── docker-compose.yml     # ollama + ollama-init + web (FastAPI :8000)
+└── docker-compose.monitoring.yml  # Prometheus + Grafana + Loki + Promtail
 ```
 
 ---
@@ -378,7 +386,9 @@ All variables have sensible defaults. The app works out of the box without editi
 
 ### Web UI (React)
 
-The React app (default, [http://localhost:8000](http://localhost:8000)) has a **collapsible left navbar** with four sections and a **top bar** holding the model picker, Ollama status, and knowledge-base controls (upload PDF, scrape a topic, chunk count, clear). Each section has its own accent color, so the UI shifts hue as you move between them. The sidebar collapses to an icon rail on desktop and becomes a drawer on mobile.
+The React app (default, [http://localhost:8000](http://localhost:8000)) has a **collapsible left navbar** with four sections and a **top bar** holding the model picker, Ollama status, and a **Knowledge base** button. Each section has its own accent color, so the UI shifts hue as you move between them. The sidebar collapses to an icon rail on desktop and becomes a drawer on mobile.
+
+The **Knowledge base** button opens a panel that lists every indexed file/URL with its chunk count, lets you upload PDFs or scrape a web topic, and shows a clear ✓/✗ acknowledgement when indexing finishes (with a live "indexing…" indicator). All dropdowns (model, quiz options) are custom, theme-matched, keyboard-accessible components — not native browser selects.
 
 | Section | What it does |
 | --- | --- |
@@ -675,6 +685,7 @@ All settings are managed by `pydantic-settings` in `app/config.py`. Override any
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `OLLAMA_MODEL` | `qwen2.5:7b` | Default LLM for chat, quiz, and analysis |
 | `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text` | Embedding model (required) |
+| `OLLAMA_KEEP_ALIVE` | `30m` | How long Ollama keeps the model resident after a call. Higher = no cold-load latency between requests. `-1` keeps it loaded indefinitely. |
 | `CHROMA_PERSIST_DIR` | `data/chroma` | ChromaDB persistent storage directory |
 | `CHROMA_COLLECTION_NAME` | `rag-chatbot` | ChromaDB collection name |
 | `CHUNK_SIZE` | `1000` | Max characters per text chunk |
@@ -697,6 +708,65 @@ After changing `CHUNK_SIZE` or `CHUNK_OVERLAP`, re-ingest documents for the chan
 | `CHUNK_OVERLAP` | Increase if answers are being cut off at chunk boundaries. |
 | `QUIZ_TOP_K` | Higher = more source material for question generation. Increase if questions are too narrow. |
 | Model choice | Larger models (`llama3.1:8b`, `qwen2.5:7b`) produce better questions and answers than smaller ones. |
+
+---
+
+## Performance
+
+First-token latency is dominated by the local model. Two levers:
+
+- **Keep the model warm.** `OLLAMA_KEEP_ALIVE` (default `30m`) keeps the model resident between requests, so you only pay the multi-second cold load once. Set `-1` to never unload. This is applied to every LLM call.
+- **Pick a model that fits your hardware.** `qwen2.5:7b` is the quality default; on slower machines switch to `llama3.2:3b` (≈2 GB) or `llama3.2:1b` from the model picker for noticeably faster responses at lower quality.
+
+All chat surfaces stream token-by-token, so the first token appears as soon as the model starts generating rather than after the full answer. Quiz generation is a single non-streaming call (it returns N structured questions at once) and is the slowest operation — use a smaller model or fewer questions if it drags. Watch the actual numbers on the latency panels in Grafana (below).
+
+---
+
+## Monitoring & Observability
+
+The backend exposes Prometheus metrics at **`GET /metrics`**. A ready-made stack (Prometheus + Grafana + Loki + Promtail) lives in `monitoring/` and ships logs and metrics straight to a provisioned Grafana dashboard.
+
+```bash
+# Launch the app + observability stack together
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up --build
+```
+
+| Service | URL | Purpose |
+| --- | --- | --- |
+| Grafana | [http://localhost:3000](http://localhost:3000) (admin / admin) | Dashboards + log explorer |
+| Prometheus | [http://localhost:9090](http://localhost:9090) | Metrics store, scrapes `web:8000/metrics` |
+| Loki | `http://localhost:3100` | Log store (queried via Grafana) |
+| `/metrics` | [http://localhost:8000/metrics](http://localhost:8000/metrics) | Raw Prometheus exposition |
+
+Grafana opens with the **"Prep Pal AI — Overview"** dashboard already provisioned (datasources + panels), showing:
+
+- Ollama up/down, indexed KB chunks, request and error rates
+- LLM request latency **p95 by surface** (chat · code · agent · quiz)
+- Streamed **tokens/sec by surface** and HTTP request rate by route
+- A live **log panel** (Loki) filtered to the `web` service — `{compose_service="web"}`
+
+### Custom metrics
+
+| Metric | Type | Labels | Meaning |
+| --- | --- | --- | --- |
+| `preppal_llm_request_duration_seconds` | histogram | `surface` | End-to-end LLM request duration |
+| `preppal_llm_requests_total` | counter | `surface`, `status` | LLM requests by outcome |
+| `preppal_stream_tokens_total` | counter | `surface` | Tokens streamed to clients |
+| `preppal_ollama_up` | gauge | — | Ollama reachable (1/0) |
+| `preppal_kb_chunks` | gauge | — | Chunks indexed in the knowledge base |
+
+Default per-route HTTP metrics (`http_requests_total`, `http_request_duration_seconds`) come from `prometheus-fastapi-instrumentator`.
+
+### Streaming logs
+
+Logs are written to stdout (captured by Docker). Stream them directly:
+
+```bash
+docker compose logs -f web          # app/API logs
+docker compose logs -f ollama       # model server
+```
+
+Or explore them in Grafana → Explore → Loki with `{compose_service="web"}` (Promtail tails all project containers via the Docker socket). To wire your own stack, point any Prometheus scraper at `web:8000/metrics`.
 
 ---
 

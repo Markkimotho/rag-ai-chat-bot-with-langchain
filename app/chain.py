@@ -19,6 +19,7 @@ def _build_chain(model: str | None = None, top_k: int | None = None):
         model=model or settings.ollama_model,
         base_url=settings.ollama_base_url,
         temperature=0,
+        keep_alive=settings.ollama_keep_alive,
     )
     retriever = get_retriever(top_k=top_k)
 

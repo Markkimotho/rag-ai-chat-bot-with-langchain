@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api/client";
 import { useModelContext } from "../context/ModelContext";
+import { Select, type SelectOption } from "./Select";
 import styles from "./ModelPicker.module.css";
 
 export function ModelPicker() {
@@ -10,6 +11,12 @@ export function ModelPicker() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const isInstalled = installed.includes(selected);
+
+  const options: SelectOption[] = supported.map((m) => ({
+    value: m,
+    label: m,
+    hint: installed.includes(m) ? undefined : "not installed",
+  }));
 
   const pull = async () => {
     setPulling(true);
@@ -27,22 +34,15 @@ export function ModelPicker() {
 
   return (
     <div className={styles.wrap}>
-      <label className={styles.label} htmlFor="model-select">
-        Model
-      </label>
-      <select
-        id="model-select"
-        className={styles.select}
-        value={selected}
-        onChange={(e) => setSelected(e.target.value)}
-      >
-        {supported.map((m) => (
-          <option key={m} value={m}>
-            {m}
-            {installed.includes(m) ? "" : "  (not installed)"}
-          </option>
-        ))}
-      </select>
+      <div className={styles.selectBox}>
+        <Select
+          ariaLabel="Model"
+          value={selected}
+          options={options}
+          onChange={setSelected}
+          placeholder="Model"
+        />
+      </div>
       {!isInstalled && selected && (
         <button
           type="button"

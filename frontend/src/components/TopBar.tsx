@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useKnowledgeBase } from "../context/KnowledgeBaseContext";
 import { useModelContext } from "../context/ModelContext";
+import { KnowledgeBasePanel } from "./KnowledgeBasePanel";
 import { ModelPicker } from "./ModelPicker";
 import styles from "./TopBar.module.css";
 
@@ -12,35 +13,8 @@ interface Props {
 
 export function TopBar({ title, isMobile, onOpenMenu }: Props) {
   const { online, modelCount } = useModelContext();
-  const { count, busy, upload, scrape, clear } = useKnowledgeBase();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [topic, setTopic] = useState("");
-  const [note, setNote] = useState<string | null>(null);
-
-  const flash = (m: string) => {
-    setNote(m);
-    setTimeout(() => setNote(null), 4000);
-  };
-
-  const onFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    try {
-      flash(await upload(Array.from(files)));
-    } catch {
-      flash("Upload failed.");
-    }
-    if (fileRef.current) fileRef.current.value = "";
-  };
-
-  const onScrape = async () => {
-    if (!topic.trim()) return;
-    try {
-      flash(await scrape(topic.trim()));
-      setTopic("");
-    } catch {
-      flash("Scrape failed.");
-    }
-  };
+  const { count, sources, busy } = useKnowledgeBase();
+  const [kbOpen, setKbOpen] = useState(false);
 
   return (
     <header className={styles.bar}>
@@ -69,56 +43,30 @@ export function TopBar({ title, isMobile, onOpenMenu }: Props) {
       <div className={styles.right}>
         <ModelPicker />
 
-        <div className={styles.kb}>
-          <span className={styles.kbCount} title="Indexed chunks">
-            {count} chunks
-          </span>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/pdf"
-            multiple
-            hidden
-            onChange={(e) => onFiles(e.target.files)}
-          />
+        <div className={styles.kbWrap}>
           <button
             type="button"
-            className={styles.kbBtn}
-            onClick={() => fileRef.current?.click()}
-            disabled={busy}
+            className={styles.kbButton}
+            aria-haspopup="dialog"
+            aria-expanded={kbOpen}
+            onClick={() => setKbOpen((o) => !o)}
           >
-            Upload PDF
+            <svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden>
+              <ellipse cx="8" cy="4" rx="5.5" ry="2" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M2.5 4v8c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2V4" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M2.5 8c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2" stroke="currentColor" strokeWidth="1.3" />
+            </svg>
+            <span className={styles.kbLabel}>
+              {sources.length > 0
+                ? `${sources.length} file${sources.length !== 1 ? "s" : ""}`
+                : "Knowledge base"}
+            </span>
+            {count > 0 && <span className={styles.kbBadge}>{count}</span>}
+            {busy && <span className={styles.kbDot} aria-label="working" />}
           </button>
-          <div className={styles.scrapeBox}>
-            <input
-              className={styles.scrapeInput}
-              placeholder="Scrape topic…"
-              value={topic}
-              aria-label="Scrape a web topic"
-              onChange={(e) => setTopic(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && onScrape()}
-            />
-            <button
-              type="button"
-              className={styles.kbBtn}
-              onClick={onScrape}
-              disabled={busy || !topic.trim()}
-            >
-              {busy ? "…" : "Index"}
-            </button>
-          </div>
-          <button
-            type="button"
-            className={styles.kbBtnGhost}
-            onClick={() => clear()}
-            disabled={busy || count === 0}
-          >
-            Clear
-          </button>
+          {kbOpen && <KnowledgeBasePanel onClose={() => setKbOpen(false)} />}
         </div>
       </div>
-
-      {note && <div className={styles.note}>{note}</div>}
     </header>
   );
 }

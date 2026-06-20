@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:7b"
     ollama_embedding_model: str = "nomic-embed-text"
+    # Keep the model resident in memory between requests to avoid cold-load
+    # latency. "30m" keeps it warm for 30 min after the last call; "-1" = forever.
+    ollama_keep_alive: str = "30m"
 
     # ChromaDB (local, free)
     chroma_persist_dir: str = "data/chroma"

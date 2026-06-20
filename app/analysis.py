@@ -152,7 +152,12 @@ def _run_single_model(model: str, question: str, context: str) -> dict:
     settings = get_settings()
     t0 = time.perf_counter()
     try:
-        llm = ChatOllama(model=model, base_url=settings.ollama_base_url, temperature=0.1)
+        llm = ChatOllama(
+            model=model,
+            base_url=settings.ollama_base_url,
+            temperature=0.1,
+            keep_alive=settings.ollama_keep_alive,
+        )
         prompt = _ANALYST_PROMPT.format(context=context, question=question)
         response = llm.invoke([HumanMessage(content=prompt)])
         elapsed = round(time.perf_counter() - t0, 1)
@@ -233,6 +238,7 @@ def generate_insights(top_k: int = 10, model: str | None = None) -> dict[str, di
                 model=model,
                 base_url=settings.ollama_base_url,
                 temperature=0,
+                keep_alive=settings.ollama_keep_alive,
             )
             prompt = _ANALYST_PROMPT.format(context=context, question=question)
             response = llm.invoke([HumanMessage(content=prompt)])

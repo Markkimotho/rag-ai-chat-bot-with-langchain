@@ -98,13 +98,15 @@ def test_kb_scrape_failure_returns_502():
 
 
 def test_kb_upload_pdf():
-    with patch("app.api.load_and_chunk_pdf", return_value=["a", "b", "c"]), patch(
+    with patch("app.api.load_and_chunk_pdf", return_value=["a", "b", "c"]) as mock_load, patch(
         "app.api.ingest_documents", return_value=3
     ):
         files = {"files": ("notes.pdf", b"%PDF-1.4 fake", "application/pdf")}
         body = client.post("/api/kb/upload", files=files).json()
     assert body["chunks_added"] == 3
     assert "notes.pdf" in body["detail"]
+    # The original filename (not the tempfile path) is preserved as the source.
+    assert mock_load.call_args.kwargs["source_name"] == "notes.pdf"
 
 
 def test_kb_upload_skips_non_pdf():
@@ -118,6 +120,23 @@ def test_kb_clear():
     with patch("app.api.clear_vectorstore") as m:
         assert client.delete("/api/kb").json() == {"cleared": True}
     m.assert_called_once()
+
+
+def test_kb_sources_lists_files():
+    fake = [
+        {"source": "algo.pdf", "chunks": 12, "type": "pdf"},
+        {"source": "https://en.wikipedia.org/wiki/Binary_search", "chunks": 40, "type": "web"},
+    ]
+    with patch("app.api.list_sources", return_value=fake):
+        body = client.get("/api/kb/sources").json()
+    assert body["sources"][0]["source"] == "algo.pdf"
+    assert body["sources"][1]["type"] == "web"
+    assert body["sources"][1]["chunks"] == 40
+
+
+def test_kb_sources_empty():
+    with patch("app.api.list_sources", return_value=[]):
+        assert client.get("/api/kb/sources").json() == {"sources": []}
 
 
 # ── Chat streaming (RAG) ────────────────────────────────────────────────────
@@ -244,6 +263,41 @@ def test_quiz_explain():
             "/api/quiz/explain", json={"concept": "recursion"}
         ).json()
     assert body["explanation"].startswith("Recursion")
+
+
+# ── Metrics ──────────────────────────────────────────────────────────────────
+
+
+def test_metrics_endpoint_exposes_custom_metrics():
+    # Drive one streamed request so the token/latency metrics have samples.
+    def fake(**kwargs):
+        yield ("token", "x")
+
+    with patch("app.api.code_assistant.stream_code_assistant", side_effect=fake):
+        client.post("/api/code-chat/stream", json={"message": "hi"})
+
+    body = client.get("/metrics").text
+    assert "preppal_stream_tokens_total" in body
+    assert "preppal_llm_request_duration_seconds" in body
+    assert "preppal_llm_requests_total" in body
+    # Default HTTP metrics from the instrumentator are present too.
+    assert "http_request" in body
+
+
+def test_metrics_count_tokens_for_surface():
+    from app.metrics import STREAM_TOKENS
+
+    before = STREAM_TOKENS.labels("code")._value.get()
+
+    def fake(**kwargs):
+        yield ("token", "a")
+        yield ("token", "b")
+
+    with patch("app.api.code_assistant.stream_code_assistant", side_effect=fake):
+        client.post("/api/code-chat/stream", json={"message": "hi"})
+
+    after = STREAM_TOKENS.labels("code")._value.get()
+    assert after - before == 2
 
 
 # ── SPA serving (only when a frontend build exists) ─────────────────────────

@@ -1,7 +1,7 @@
 services:
   ollama:
     image: ollama/ollama:latest
-    container_name: exam-prep-ollama
+    container_name: prep-pal-ollama
     volumes:
       - ollama_models:/root/.ollama
     ports:
@@ -25,7 +25,7 @@ services:
 
   ollama-init:
     image: ollama/ollama:latest
-    container_name: exam-prep-ollama-init
+    container_name: prep-pal-ollama-init
     depends_on:
       ollama:
         condition: service_healthy
@@ -46,7 +46,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: exam-prep-web
+    container_name: prep-pal-web
     ports:
       - "8000:8000"
     depends_on:

@@ -60,3 +60,27 @@ def get_doc_count() -> int:
         return get_vectorstore()._collection.count()
     except Exception:
         return 0
+
+
+def list_sources() -> list[dict]:
+    """Return the distinct sources in the KB with per-source chunk counts.
+
+    Each item: {"source": str, "chunks": int, "type": str}. Sorted by source.
+    Used by the UI to show what's in the knowledge base.
+    """
+    try:
+        collection = get_vectorstore()._collection
+        if collection.count() == 0:
+            return []
+        data = collection.get(include=["metadatas"])
+        counts: dict[str, dict] = {}
+        for md in data.get("metadatas", []) or []:
+            src = (md or {}).get("source", "unknown")
+            entry = counts.setdefault(
+                src, {"source": src, "chunks": 0, "type": (md or {}).get("type", "pdf")}
+            )
+            entry["chunks"] += 1
+        return sorted(counts.values(), key=lambda x: x["source"].lower())
+    except Exception:
+        logger.exception("list_sources failed")
+        return []

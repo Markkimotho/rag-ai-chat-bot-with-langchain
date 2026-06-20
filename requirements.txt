@@ -18,6 +18,10 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 python-multipart>=0.0.9
 
+# Observability (Prometheus /metrics → Grafana)
+prometheus-client>=0.20
+prometheus-fastapi-instrumentator>=7.0
+
 # Quiz / web scraping
 beautifulsoup4>=4.12
 lxml>=5.0

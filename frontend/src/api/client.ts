@@ -10,6 +10,7 @@ import type {
   PullResponse,
   QuestionType,
   QuizQuestion,
+  SourcesResponse,
   ValidationResult,
 } from "./types";
 
@@ -50,6 +51,7 @@ export const api = {
     }),
 
   kbCount: () => request<CountResponse>("/api/kb/count"),
+  kbSources: () => request<SourcesResponse>("/api/kb/sources"),
   kbScrape: (topic: string, num_results = 3) =>
     request<IngestResponse>("/api/kb/scrape", {
       method: "POST",

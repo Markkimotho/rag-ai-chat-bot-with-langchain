@@ -51,6 +51,16 @@ class ClearResponse(BaseModel):
     cleared: bool
 
 
+class KBSource(BaseModel):
+    source: str
+    chunks: int
+    type: str = "pdf"
+
+
+class SourcesResponse(BaseModel):
+    sources: list[KBSource]
+
+
 # ── Chat (Regular Chat, RAG) ────────────────────────────────────────────────
 
 

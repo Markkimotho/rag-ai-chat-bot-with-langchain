@@ -214,6 +214,7 @@ def invoke_agent(
         model=model or settings.ollama_model,
         base_url=settings.ollama_base_url,
         temperature=0.2,
+        keep_alive=settings.ollama_keep_alive,
     )
     agent = create_react_agent(
         llm,
@@ -248,6 +249,7 @@ def stream_agent(
         model=model or settings.ollama_model,
         base_url=settings.ollama_base_url,
         temperature=0.2,
+        keep_alive=settings.ollama_keep_alive,
     )
     agent = create_react_agent(
         llm,

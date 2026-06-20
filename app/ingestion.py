@@ -84,10 +84,18 @@ def _try_ocr(pdf_path: Path, source_name: str) -> list[Document]:
         return []
 
 
-def load_and_chunk_pdf(pdf_path: str | Path) -> list[Document]:
+def load_and_chunk_pdf(
+    pdf_path: str | Path, source_name: str | None = None
+) -> list[Document]:
+    """Load + chunk a PDF.
+
+    `source_name` overrides the metadata source label — pass the original
+    filename when the file on disk is a temp upload, so the knowledge base
+    shows "notes.pdf" rather than a random tempfile name.
+    """
     settings = get_settings()
     pdf_path = Path(pdf_path)
-    source_name = pdf_path.name
+    source_name = source_name or pdf_path.name
 
     # Stage 1: PyPDFLoader (fast, standard)
     loader = PyPDFLoader(str(pdf_path))

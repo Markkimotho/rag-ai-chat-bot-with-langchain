@@ -24,6 +24,16 @@ export interface IngestResponse {
   detail: string;
 }
 
+export interface KBSource {
+  source: string;
+  chunks: number;
+  type: string;
+}
+
+export interface SourcesResponse {
+  sources: KBSource[];
+}
+
 export type ChatMode = "langchain" | "langgraph";
 
 export interface Source {

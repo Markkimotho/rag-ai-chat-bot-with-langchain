@@ -47,66 +47,43 @@
 .right {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
-.kb {
-  display: flex;
+
+.kbWrap {
+  position: relative;
+}
+.kbButton {
+  display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-}
-.kbCount {
-  font-size: var(--fs-xs);
-  color: var(--text-faint);
-  white-space: nowrap;
-}
-.kbBtn,
-.kbBtnGhost {
-  border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
   font-size: var(--fs-sm);
   font-weight: 500;
   white-space: nowrap;
 }
-.kbBtn {
-  border: 1px solid var(--border-strong);
-  background: var(--bg);
-  color: var(--text);
-}
-.kbBtn:hover:not(:disabled) {
+.kbButton:hover {
   background: var(--surface-2);
+  border-color: var(--accent-border);
 }
-.kbBtnGhost {
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-dim);
+.kbBadge {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-pill);
+  padding: 0 7px;
 }
-.kbBtnGhost:hover:not(:disabled) {
-  color: var(--error);
-  background: color-mix(in srgb, var(--error) 8%, white);
-}
-.kbBtn:disabled,
-.kbBtnGhost:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.scrapeBox {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-.scrapeInput {
-  width: 130px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--fs-sm);
-  background: var(--bg);
-  color: var(--text);
-}
-.scrapeInput:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus);
+.kbDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1s ease-in-out infinite;
 }
 
 .hamburger {
@@ -127,38 +104,16 @@
   border-radius: 2px;
 }
 
-.note {
-  position: absolute;
-  top: calc(var(--topbar-h) + var(--space-2));
-  right: var(--space-4);
-  z-index: 30;
-  background: var(--text);
-  color: var(--bg);
-  font-size: var(--fs-sm);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  max-width: 360px;
-  animation: slideIn var(--dur) var(--ease);
-}
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
+@keyframes pulse {
+  0%,
+  100% {
     opacity: 1;
-    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.3;
   }
 }
 
-/* Tablet/mobile: collapse KB controls to keep the bar usable. */
-@media (max-width: 1023px) {
-  .kbCount,
-  .scrapeBox {
-    display: none;
-  }
-}
 @media (max-width: 767px) {
   .right {
     gap: var(--space-2);
@@ -166,10 +121,12 @@
   .title {
     font-size: var(--fs-md);
   }
-  /* Keep Upload + Clear reachable on phones; scrape lives in Study Agent. */
+  .kbLabel {
+    display: none;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .note {
+  .kbDot {
     animation: none;
   }
 }

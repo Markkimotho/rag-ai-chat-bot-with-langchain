@@ -8,9 +8,11 @@ import {
   type ReactNode,
 } from "react";
 import { api } from "../api/client";
+import type { KBSource } from "../api/types";
 
 interface KBState {
   count: number;
+  sources: KBSource[];
   busy: boolean;
   refresh: () => Promise<void>;
   upload: (files: File[]) => Promise<string>;
@@ -22,14 +24,19 @@ const KBContext = createContext<KBState | null>(null);
 
 export function KnowledgeBaseProvider({ children }: { children: ReactNode }) {
   const [count, setCount] = useState(0);
+  const [sources, setSources] = useState<KBSource[]>([]);
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const { count } = await api.kbCount();
+      const [{ count }, { sources }] = await Promise.all([
+        api.kbCount(),
+        api.kbSources(),
+      ]);
       setCount(count);
+      setSources(sources);
     } catch {
-      /* leave previous count on transient failure */
+      /* leave previous state on transient failure */
     }
   }, []);
 
@@ -76,8 +83,8 @@ export function KnowledgeBaseProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const value = useMemo(
-    () => ({ count, busy, refresh, upload, scrape, clear }),
-    [count, busy, refresh, upload, scrape, clear],
+    () => ({ count, sources, busy, refresh, upload, scrape, clear }),
+    [count, sources, busy, refresh, upload, scrape, clear],
   );
 
   return <KBContext.Provider value={value}>{children}</KBContext.Provider>;
