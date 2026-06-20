@@ -34,9 +34,13 @@ services:
     restart: unless-stopped
 
   promtail:
-    image: grafana/promtail:2.9.8
+    # 3.x bundles a Docker API client new enough for Docker Engine 27+/Desktop 29
+    # (the 2.9 client is capped at API 1.42 and the daemon now requires ≥1.44).
+    image: grafana/promtail:3.4.1
     container_name: prep-pal-promtail
     command: ["-config.file=/etc/promtail/config.yml"]
+    environment:
+      - DOCKER_API_VERSION=1.44
     volumes:
       - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
