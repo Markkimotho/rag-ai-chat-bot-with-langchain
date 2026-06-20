@@ -219,7 +219,7 @@ def invoke_agent(
     agent = create_react_agent(
         llm,
         _TOOLS,
-        state_modifier=_SYSTEM_PROMPT,
+        prompt=_SYSTEM_PROMPT,
         checkpointer=_checkpointer,
     )
     try:
@@ -254,7 +254,7 @@ def stream_agent(
     agent = create_react_agent(
         llm,
         _TOOLS,
-        state_modifier=_SYSTEM_PROMPT,
+        prompt=_SYSTEM_PROMPT,
         checkpointer=_checkpointer,
     )
     seen_tools: set[str] = set()

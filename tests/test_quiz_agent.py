@@ -153,3 +153,37 @@ def test_list_topics_with_docs(mock_count, mock_retriever_fn):
     result = list_topics.invoke({})
     assert "42" in result
     assert "algo.pdf" in result
+
+
+# ── Agent construction (guards against langgraph API drift) ───────────────────
+
+
+def test_agent_builds_with_current_langgraph_api():
+    """create_react_agent must accept the kwargs the module passes.
+
+    Regression: langgraph renamed `state_modifier` → `prompt`. The tool tests
+    above never build the agent, so this constructs it the exact way the module
+    does (offline — no model call) to catch kwarg drift early.
+    """
+    from langchain_ollama import ChatOllama
+    from langgraph.prebuilt import create_react_agent
+
+    import app.quiz_agent as qa
+
+    llm = ChatOllama(model="qwen2.5:7b", base_url="http://localhost:1")
+    agent = create_react_agent(
+        llm, qa._TOOLS, prompt=qa._SYSTEM_PROMPT, checkpointer=qa._checkpointer
+    )
+    assert agent is not None
+
+
+def test_invoke_agent_constructs_real_agent():
+    """invoke_agent should build the real agent and only fail at network time,
+    not on a bad keyword argument."""
+    from app.quiz_agent import invoke_agent
+
+    # No Ollama server here, so the agent's model call fails — but the failure
+    # must be a connection/runtime error, NOT a TypeError about bad kwargs.
+    result = invoke_agent("hello", thread_id="build-check", model="qwen2.5:7b")
+    assert "unexpected keyword" not in result
+    assert "state_modifier" not in result
