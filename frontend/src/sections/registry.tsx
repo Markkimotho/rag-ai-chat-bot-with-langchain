@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
 
-export type SectionId = "quiz" | "agent" | "code" | "chat" | "cards";
+export type SectionId =
+  | "quiz"
+  | "agent"
+  | "code"
+  | "chat"
+  | "cards"
+  | "guide";
 
 export interface SectionDef {
   id: SectionId;
@@ -66,6 +72,18 @@ const CardsIcon = (
   </svg>
 );
 
+const GuideIcon = (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden>
+    <path
+      d="M4 5a2 2 0 012-2h9l5 5v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5z"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+    />
+    <path d="M8 9h6M8 13h8M8 17h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+);
+
 export const SECTIONS: SectionDef[] = [
   {
     id: "quiz",
@@ -101,6 +119,13 @@ export const SECTIONS: SectionDef[] = [
     label: "Flashcards",
     blurb: "Create, generate, and study flashcards.",
     icon: CardsIcon,
+  },
+  {
+    id: "guide",
+    path: "/guide",
+    label: "Guide",
+    blurb: "How to use the app + developer docs.",
+    icon: GuideIcon,
   },
 ];
 

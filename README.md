@@ -2,7 +2,7 @@
 
 A fully local AI study tool that turns any document or web topic into interactive quizzes. Upload your PDFs, paste a URL, or just name a topic and it scrapes the web — then generates MCQ, True/False, and Short Answer questions, grades your answers with feedback, and explains concepts on demand. Everything runs on your machine via Ollama. No API keys. No cloud costs.
 
-The primary interface is a **React** single-page app with a collapsible navbar and five sections — **Quiz Prep**, **Study Agent**, **Programming Assistant**, **Regular Chat**, and **Flashcards** — served by a **FastAPI** backend that streams responses token-by-token. Upload PDFs **or images** (OCR'd automatically); your documents are reachable from every chat section. The legacy Streamlit UI (Multi-Model Analysis + Insights) remains available.
+The primary interface is a **React** single-page app with a collapsible navbar — **Quiz Prep**, **Study Agent**, **Programming Assistant**, **Regular Chat**, **Flashcards**, and an in-app **Guide** — served by a **FastAPI** backend that streams responses token-by-token. Upload PDFs **or images** (OCR'd automatically); your documents are reachable from every chat section. The legacy Streamlit UI (Multi-Model Analysis + Insights) remains available.
 
 Built on React + FastAPI + LangChain + LangGraph + ChromaDB + Ollama.
 
@@ -406,6 +406,7 @@ The **Knowledge base** button opens a panel that lists every indexed file/URL wi
 | **Programming Assistant** | A coding chat with syntax-highlighted, copy-able code blocks. Flip the **"Use my documents"** toggle to ground answers in your uploaded files.                    |
 | **Regular Chat**          | RAG document Q&A with source citations and a LangChain/LangGraph mode toggle.                                                                                    |
 | **Flashcards**            | Create decks and cards by hand or auto-generate from your documents; study with animated flip cards and keyboard controls.                                       |
+| **Guide**                 | Built-in docs: how to use every feature plus developer reference (API, monitoring/Loki, testing, config, architecture).                                          |
 
 All chat responses stream token-by-token over SSE. Upload a PDF/image or scrape a topic from the top bar; your documents are reachable from Regular Chat, Study Agent, the Programming Assistant (toggle), Quiz Prep, and Flashcard generation.
 
@@ -781,7 +782,44 @@ docker compose logs -f web          # app/API logs
 docker compose logs -f ollama       # model server
 ```
 
-Or explore them in Grafana → Explore → Loki with `{compose_service="web"}` (Promtail tails all project containers via the Docker socket). To wire your own stack, point any Prometheus scraper at `web:8000/metrics`.
+### Using Loki — step by step
+
+**Loki has no web UI** — opening `http://localhost:3100` returns *404 page not found*, which is expected. You read logs through Grafana; Promtail feeds them in.
+
+1. Open **Grafana** → [http://localhost:3000](http://localhost:3000) (admin / admin).
+2. Left sidebar → **Explore** (compass icon).
+3. Datasource dropdown → **Loki**.
+4. Type a query and **Run query** (Shift+Enter).
+
+Promtail tags each line with these labels:
+
+| Label | Examples |
+| --- | --- |
+| `compose_service` | `web`, `ollama`, `grafana`, `prometheus` |
+| `container` | `prep-pal-web`, `prep-pal-ollama` |
+| `compose_project` | `rag-ai-chat-bot-with-langchain` |
+
+LogQL queries you'll use:
+
+```logql
+{compose_service="web"}                     # all backend/API logs
+{compose_service="ollama"}                  # model server
+{compose_service="web"} |= "error"          # lines containing "error"
+{compose_service="web"} != "GET /metrics"   # hide the metrics scrapes
+{compose_service="web"} |~ "(?i)error|fail" # regex, case-insensitive
+{compose_service="web"} | json              # parse JSON lines into fields
+```
+
+Operators: `|=` contains · `!=` excludes · `|~` regex · `!~` regex-exclude. Click **Live** in Explore to tail in real time. The dashboard's **"Web logs"** panel runs `{compose_service="web"}` automatically — widen the time range (top-right) if it looks empty.
+
+Sanity checks:
+
+```bash
+curl -s http://localhost:3100/ready
+curl -s "http://localhost:3100/loki/api/v1/label/compose_service/values"  # lists web, ollama, …
+```
+
+A full version of this guide (plus every feature) is built into the app at the **Guide** tab. To wire your own stack, point any Prometheus scraper at `web:8000/metrics`.
 
 ---
 

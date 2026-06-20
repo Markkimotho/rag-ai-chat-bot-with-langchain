@@ -83,6 +83,9 @@
 .item.active[data-section="cards"] {
   --accent: var(--accent-cards);
 }
+.item.active[data-section="guide"] {
+  --accent: var(--accent-guide);
+}
 .item.active {
   background: var(--accent-soft);
   color: var(--accent);

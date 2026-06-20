@@ -3,6 +3,7 @@ import { AppLayout } from "./components/AppLayout";
 import { KnowledgeBaseProvider } from "./context/KnowledgeBaseContext";
 import { ModelProvider } from "./context/ModelContext";
 import { Flashcards } from "./sections/Flashcards";
+import { Guide } from "./sections/Guide";
 import { ProgrammingAssistant } from "./sections/ProgrammingAssistant";
 import { QuizPrep } from "./sections/QuizPrep";
 import { RegularChat } from "./sections/RegularChat";
@@ -20,6 +21,7 @@ export function App() {
             <Route path="/code" element={<ProgrammingAssistant />} />
             <Route path="/chat" element={<RegularChat />} />
             <Route path="/flashcards" element={<Flashcards />} />
+            <Route path="/guide" element={<Guide />} />
             <Route path="*" element={<Navigate to="/quiz" replace />} />
           </Route>
         </Routes>

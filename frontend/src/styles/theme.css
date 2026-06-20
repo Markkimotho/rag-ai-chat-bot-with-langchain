@@ -29,6 +29,7 @@
   --accent-code: #10b981; /* emerald */
   --accent-chat: #f43f5e; /* rose */
   --accent-cards: #f59e0b; /* amber */
+  --accent-guide: #6366f1; /* indigo */
 
   /* Active accent — set by AppLayout from the current route. */
   --accent: #0ea5e9;
@@ -99,6 +100,9 @@
 }
 [data-section="cards"] {
   --accent: var(--accent-cards);
+}
+[data-section="guide"] {
+  --accent: var(--accent-guide);
 }
 
 @media (prefers-reduced-motion: reduce) {

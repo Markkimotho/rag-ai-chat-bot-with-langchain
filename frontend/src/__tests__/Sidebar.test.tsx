@@ -30,6 +30,7 @@ describe("Sidebar", () => {
     expect(screen.getByText("Programming Assistant")).toBeInTheDocument();
     expect(screen.getByText("Regular Chat")).toBeInTheDocument();
     expect(screen.getByText("Flashcards")).toBeInTheDocument();
+    expect(screen.getByText("Guide")).toBeInTheDocument();
   });
 
   it("marks the active route with aria-current", () => {
@@ -50,7 +51,7 @@ describe("Sidebar", () => {
     renderAt("/quiz", { collapsed: true });
     expect(screen.queryByText("Quiz Prep")).not.toBeInTheDocument();
     // Links remain (icon-only) and accessible via title.
-    expect(screen.getAllByRole("link")).toHaveLength(5);
+    expect(screen.getAllByRole("link")).toHaveLength(6);
   });
 
   it("traps focus and closes on Escape when used as a mobile drawer", async () => {
